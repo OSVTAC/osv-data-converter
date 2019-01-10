@@ -3,7 +3,7 @@
 #
 
 """
-Program to fetch json ballot data for SF from omiballot
+Program to fetch json ballot definition dat from omiballot
 
 Note: current code assumes a 2 digit ballot type. An upgrade
 to scan for the max ballot type to zero fill would be useful
@@ -19,7 +19,7 @@ import urllib.request
 
 DESCRIPTION = """\
 Fetch election definition data from omniballot sample ballots. Files
-are fetched if
+are fetched if not already present.
 
 Creates the files:
   * ./lookups.json
@@ -141,12 +141,12 @@ os.makedirs("bt", exist_ok=True)
 for sid, s in j['styles'].items():
     print(f'Fetching Style {sid} for bt {s["code"]}')
     # See sample above, the styles.[].json_uri has the URL to fetch.
-    j = getjsonfile(s['json_uri'], f'bt/bt{s["code"].zfill(2)}.json')
+    j = getjsonfile(s['json_uri'], f'bt/bt{s["code"].zfill(3)}.json')
     #
-    #put_json_file(j['boxes'], f'bt/btb{s["code"].zfill(2)}.json')
+    #put_json_file(j['boxes'], f'bt/btb{s["code"].zfill(3)}.json')
     #j = getjsonfile(GETBT_PREFIX+s['json_uri'],
-                    #f'bt/btx{s["code"].zfill(2)}.json')
-    #put_json_file(j['ballot']['boxes'], f'bt/btbx{s["code"].zfill(2)}.json')
+                    #f'bt/btx{s["code"].zfill(3)}.json')
+    #put_json_file(j['ballot']['boxes'], f'bt/btbx{s["code"].zfill(3)}.json')
     #break
 
 

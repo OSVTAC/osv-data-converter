@@ -1,6 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
+# Copyright (C) 2018  Carl Hage
+#
+# This file is part of Open Source Voting Data Converter (ODC).
+#
+# ODC is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
 
 """
 Program to convert results download datasets for SF to ORR data format
@@ -13,8 +30,11 @@ import os.path
 import re
 import argparse
 import struct
+
 # Local file imports
 from tsvio import TSVReader
+import re2
+
 # Library imports
 from datetime import datetime
 from collections import OrderedDict
@@ -142,106 +162,6 @@ def strnull(x:str)->str:
     """
     return "" if x == None else x
 
-class re2:
-    """
-    The re2 is a wrapper on re to maintain a single context for
-    search and results. This somewhat compensates for python's feeble
-    regex support. Allows tests for search results without having
-    to repeat the search to get the patterns.
-
-    Partially allows similar functionality with perl
-    """
-
-    def __init__(self,
-                 pattern:str,   # Regex pattern to compile
-                 flags=0):      # Flags for compile
-        """
-        Creates an object to hold a compiled regex and results match.
-        """
-        self.regex = re.compile(pattern, flags)
-        self.m = None
-        self.nsubs = 0
-
-    def search(self, string):
-        self.m = self.regex.search(string)
-        return self.m
-
-    def match(self, string):
-        self.m = self.regex.match(string)
-        return self.m
-
-    def sub(self, repl, string, count=0, pattern=None, flags=0, formatted=False):
-        """
-        Like re.sub() but saves the last match object.
-        Use formatted {0} {1} instead of \1 \2 etc.
-        """
-        if pattern is None:
-            pattern = self.regex
-
-        def rfunc(m):
-            self.m = m
-            if formatted:
-                args = map(strnull,m.groups())
-                return repl.format(*args)
-            return repl
-
-        self.m = None
-        (self.string, self.nsubs) = re.subn(pattern, rfunc, string, count, flags)
-        return self.string
-
-    def subt(self, repl, string, count=0):
-        """
-        Like re.sub, but saves the last match and string, returns nsubs
-        """
-        self.sub(repl, string, count)
-        return self.nsubs
-
-    def sub2(self, string, pattern, repl, count=0, flags=0):
-        """
-        Wrapper for self.sub with string, pattern, repl
-        """
-        return self.sub(repl, string, count, pattern, flags)
-
-    def sub2f(self, string, pattern, repl, count=0, flags=0):
-        """
-        Wrapper for self.sub with string, pattern, formatted repl
-        """
-        return self.sub(repl, string, count, pattern, flags, True)
-
-    def sub2t(self, string, pattern, repl, count=0, flags=0):
-        """
-        Wrapper for self.subt with string, pattern, repl
-        """
-        self.sub(repl, string, count, pattern, flags)
-        return self.nsubs
-
-    def sub2ft(self, string, pattern, repl, count=0, flags=0):
-        """
-        Wrapper for self.subt with string, pattern, formatted repl
-        """
-        self.sub(repl, string, count, pattern, flags, True)
-        return self.nsubs
-
-    def nsubs(self):
-        return self.nsubs
-
-    def string(self):
-        return self.string
-
-    def groups(self, default=None):
-        """
-        Returns '' instead of None for no match
-        """
-        if not self.m: return None
-        return map(strnull,self.m.groups(default))
-
-    def group(self, *args):
-        if not self.m: return None
-        return self.m.group(*args)
-
-    def __getitem__(i):
-        if not self.m: return None
-        return self.m[i]
 
 
 args = parse_args()
@@ -277,7 +197,9 @@ def newtsvline(
     """
     Join a list of columns with \t and append \n, the add to datalist
     """
-    datalist.append(jointsvline(*args))
+    line = jointsvline(*args)
+    datalist.append(line)
+    return(line)
 
 def newtsvlineu(
     foundHash: Dict[str, str],   # Hash of unique lines by args[0]
