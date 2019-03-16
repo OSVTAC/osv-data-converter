@@ -33,7 +33,7 @@ import struct
 
 # Local file imports
 from tsvio import TSVReader
-import re2
+from re2 import re2
 
 # Library imports
 from datetime import datetime
@@ -80,6 +80,7 @@ VOTING_STATS = OrderedDict([
     ('RSTot', 'Total Votes'),       # Sum of valid votes reported
     ('RSCst', 'Ballots Cast'),      # Ballot sheets submitted by voters
     ('RSReg', 'Registered Voters'), # Voters registered for computing turnout
+    ('RSEli', 'Eligible Voters'),   # Voters eligible to be registered
     ('RSTrn', 'Voter Turnout'),     # (SVCst/SVReg)*100
     ('RSRej', 'Ballots Rejected'),  # Not countable
     ('RSUnc', 'Ballots Uncounted'), # Not yet counted or needing adjudication
@@ -279,6 +280,18 @@ def checkDuplicate(d:Dict[str,str],  # Dict to set/check
         print(f"Duplicate {msg} for {key}->{val}!={d[key]} at {linenum}")
         raise
 
+def loadEligible()->str:
+    """
+    Reads the ../vr/county.tsv file to locate eligible voters by county.
+    Returns the count as a string, a numbmer or null.
+    """
+    try:
+        with TSVReader("../vr/county.tsv") as reader:
+            eligible_by_county = reader.load_simple_dict(0,1)
+            return eligible_by_county.get("San Francisco","")
+    except:
+        return ""
+
 
 def loadRCVData(rzip,                   # zipfile context
                 contest_name:str,       # Contest name
@@ -355,6 +368,20 @@ isrcv = set() # Contest IDs with RCV
 
 no_voter_precincts = set() # IDs for precincts with no registered voters
 
+#Load the contest ID map
+# TODO: Remap to original DFM IDs
+# Temporary - Use Omniballot contest ID, EDS candidate ID
+have_contmap = os.path.isfile("contmap.tsv")
+if have_contmap:
+    with TSVReader("contmap.tsv") as r:
+        contmap = r.load_simple_dict(0,1)
+    with TSVReader("candmap.tsv") as r:
+        candmap = r.load_simple_dict(0,1)
+
+#Load countywide eligible voters
+eligible_voters = loadEligible()
+
+# Process the downloaded SF results stored in resultdata-raw.zip
 with ZipFile("resultdata-raw.zip") as rzip:
     rfiles = rzip.infolist()
 
@@ -364,6 +391,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
         zipfilenames.add(info.filename)
 
     # Get the ID maps in masterlookup.txt
+    # Has ID maps only for RCV contests
     with rzip.open("masterlookup.txt") as f:
         candlist = []
         contlist = []
@@ -425,6 +453,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
         contestcands = {} # Table of contests by ID to candidate name to ID dict
         candorder = {} # Candidate order by ID
         candlist = []
+        writein_candlist = []
         contlist = []
         partylist = []
         contresults = []
@@ -541,8 +570,14 @@ with ZipFile("resultdata-raw.zip") as rzip:
                 candname2id[candidate_full_name] = candidate_id
                 candlist.append(candline)
                 candresults.append(candres)
+                if (is_writein_candidate == "1" and
+                    candidate_full_name != "WRITE-IN"):
+                    writein_candlist.append(candline)
 
 
+        putfile("candlist-writein.tsv",
+                "contest_id_eds|candidate_order|candidate_id|candidate_type|candidate_full_name|candidate_party_id|is_writein_candidate",
+                writein_candlist)
         putfile("candlist-eds.tsv",
                 "contest_id|candidate_order|candidate_id|candidate_type|candidate_full_name|candidate_party_id|is_writein_candidate",
                 candlist)
@@ -602,6 +637,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
         foundpctcons = {}   # pctcons lines by ID
         contstats = []      # Table of vote stats by contest ID
         pctcontest = {}     # Collected precincts by contest
+        cont_id_eds2sov = {}# Map an eds ID to sov ID
 
         # Output file struct
         contest_status_json = []
@@ -643,6 +679,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     contest_id_eds = contestname2id[contest_name]
                     candname2id = contestcands[contest_id_eds]
                     conteststat = contest_status[contest_id_eds]
+                    cont_id_eds2sov[contest_id_eds] = contest_id
 
 
                 district_name_abbrs.add(district_name_abbr)
@@ -984,6 +1021,18 @@ with ZipFile("resultdata-raw.zip") as rzip:
         # End Loop over input lines
         newtsvline(pctturnout, "ALLPCTS", reg_total,
                    ed_total+mv_total, ed_total, mv_total)
+
+        candlist_sov = []
+        for l in candlist:
+            contest_id_eds = l.split(separator,1)[0]
+            if contest_id_eds not in cont_id_eds2sov:
+                print(f"Unmatched EDS contest {l}")
+                next
+            candlist_sov.append(cont_id_eds2sov[contest_id_eds]+
+                                separator+l)
+        putfile("candlist-sov.tsv",
+                "contest_id|candidate_order|contest_id_eds|candidate_id|candidate_type|candidate_full_name|candidate_party_id|is_writein_candidate",
+                candlist_sov)
 
         putfile("pctturnout.tsv",
                 "area_id|registration|total_ballots|ed_ballots|mv_ballots",

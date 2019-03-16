@@ -61,7 +61,10 @@ SF_HTML_ENCODING = 'UTF-8'
 CONFIG_FILE = "config-omni.yaml"
 config_attrs = {
     "trim_sequence_prefix": str,            # prefix to chop
-    "retention_pats": config_pattern_list   # Match retention candidate names
+    "retention_pats": config_pattern_list,  # Match retention candidate names
+    "bt_digits": int,
+    "contest_map_file": str,
+    "candidate_map_file": str
     }
 
 DEFAULT_JSON_DUMP_ARGS = dict(sort_keys=False, separators=(',\n',':'), ensure_ascii=False)
@@ -249,7 +252,10 @@ def form_i18n_str(node:Dict)->Dict:
         node['translations']['zh'] = zh
     for lang in node['translations'].keys():
          foundlang.add(lang)
-    return {"en":node['value'], **node['translations'] }
+    return {"en":node['value'].strip(), **node['translations'] }
+
+def str2istr(s:str)->Dict:
+    return {"en":s}
 
 def conv_titles(titles):
     """
@@ -391,9 +397,14 @@ def conv_bt_json(j:Dict, bt:str):
         if len(paragraphs)>1:
             raise FormatError(f"Multiple text paragraphs for {sequence}:{title}")
 
+        if external_id in contmap:
+            mapped_id = contmap[external_id]
+        else:
+            mapped_id = external_id
+
         if contest_type != "header" and contest_type != "text":
             # Append contest ID to contlist
-            contlist.append(external_id)
+            contlist.append(mapped_id)
 
         if not found:
             if contest_type == "header" or contest_type == "text":
@@ -422,7 +433,8 @@ def conv_bt_json(j:Dict, bt:str):
                 # TODO: lookup voting district and compute result style
 
                 contj = contestjson[sequence] = {
-                    "_id": external_id,
+                    "_id": mapped_id,
+                    "_id_ext": external_id,
                     "_type": _type,
                     "header_id": lastheader,
                     "ballot_title": titles[0]}
@@ -475,6 +487,11 @@ def conv_bt_json(j:Dict, bt:str):
                     writein_lines += 1
                     continue
                 cand_id = str(o["id"])
+
+                if cand_external_id in candmap:
+                    cand_mapped_id = candmap[cand_external_id]
+                else:
+                    cand_mapped_id = cand_external_id
                 candids.append(cand_external_id)
                 cand_seq = str(o["sequence"]).zfill(3)
                 cand_names = conv_titles(o["titles"])
@@ -508,7 +525,8 @@ def conv_bt_json(j:Dict, bt:str):
                                cand_name, party, designation, cand_type)
                     # TODO add write-in status
                     candj = {
-                        "_id": cand_external_id,
+                        "_id": cand_mapped_id,
+                        "_id_ext": cand_external_id,
                         "ballot_title": cand_names[0],
                         }
                     if party_istr:
@@ -517,6 +535,11 @@ def conv_bt_json(j:Dict, bt:str):
                         candj['ballot_designation'] = designation_istr
                     contj['choices'].append(candj)
             # End loop over contest choices
+            # Insert manually added candidates
+            if not found and external_id in added_contcand:
+                print(f"external_id={external_id} in added_contcand")
+                contj['choices'].extend(added_contcand[external_id])
+
             candlist = ' '.join(candids)
             if not found and _type == "office":
                 contj['writein_lines'] = writein_lines
@@ -617,6 +640,54 @@ for p in lookups['precincts'].values():
     #Concatenate precinct and split
     pct2extid[p['id']] = p['pid'] + pctsplitsep + p.get('sid','')
 
+# Check for a contest map
+if config.contest_map_file:
+    have_contmap = True
+    with TSVReader(config.contest_map_file) as r:
+        contmap = r.load_simple_dict(0,1)
+else:
+    have_contmap = False
+    contmap = {}
+
+# Check for a candidate map
+if config.candidate_map_file:
+    have_candmap = True
+    with TSVReader(config.candidate_map_file) as r:
+        candmap = r.load_simple_dict(1,3)
+else:
+    have_candmap = False
+    candmap = {}
+
+
+#Check for added candidates (including write-in)
+added_contcand = {}
+
+if os.path.isfile("candlist-fix.tsv"):
+    candlist_fix_header = "sequence|cont_external_id|cand_seq|cand_id|external_id"\
+        "|title|party|designation|cand_type"
+    with TSVReader("candlist-fix.tsv") as r:
+        if r.headerline != candlist_fix_header:
+            raiseFormatError(f"Unmatched candlist-fix.tsv header {r.headerline}")
+        for cols in r.readlines():
+            (sequence, cont_external_id, cand_seq, cand_id, external_id, title,
+             party, designation, cand_type) = cols
+            newtsvline(candlines, sequence, cont_external_id,
+                        cand_seq, cand_id, external_id,
+                        title, party, designation, cand_type)
+            candj = {
+                "_id": external_id,
+                "ballot_title": str2istr(title),
+                }
+            if party:
+                candj['candidate_party'] = str2istr(party)
+            if designation:
+                candj['ballot_designation'] = str2istr(designation)
+            if cont_external_id not in added_contcand:
+                added_contcand[cont_external_id] = []
+            added_contcand[cont_external_id].append(candj)
+
+
+
 # Read the composite ballot
 try:
     with open("bt/btcomposite.json") as f:
@@ -628,7 +699,7 @@ except:
 os.makedirs("bt", exist_ok=True)
 
 for sid, s in lookups['styles'].items():
-    bt = s["code"].zfill(3)
+    bt = s["code"].zfill(config.bt_digits)
     if bt == 'composite':
         continue
 

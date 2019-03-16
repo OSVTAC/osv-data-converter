@@ -26,6 +26,12 @@ the ability to perform regex matches or substitutions using "or" expressions.
 import re
 from typing import Union, List, Pattern, Match, Dict
 
+def strnull(x:str)->str:
+    """
+    Maps None to ""
+    """
+    return "" if x == None else x
+
 class re2:
     """
     The re2 is a wrapper on re to maintain a single context for
