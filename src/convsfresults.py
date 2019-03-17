@@ -1027,7 +1027,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
             contest_id_eds = l.split(separator,1)[0]
             if contest_id_eds not in cont_id_eds2sov:
                 print(f"Unmatched EDS contest {l}")
-                next
+                continue
             candlist_sov.append(cont_id_eds2sov[contest_id_eds]+
                                 separator+l)
         putfile("candlist-sov.tsv",
