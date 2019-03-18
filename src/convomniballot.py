@@ -58,6 +58,8 @@ VERSION='0.0.1'     # Program version
 SF_ENCODING = 'ISO-8859-1'
 SF_HTML_ENCODING = 'UTF-8'
 
+OUT_DIR = "../out-orr"
+
 CONFIG_FILE = "config-omni.yaml"
 config_attrs = {
     "trim_sequence_prefix": str,            # prefix to chop
@@ -523,7 +525,6 @@ def conv_bt_json(j:Dict, bt:str):
                     newtsvline(candlines, sequence, external_id,
                                cand_seq, cand_id, cand_external_id,
                                cand_name, party, designation, cand_type)
-                    # TODO add write-in status
                     candj = {
                         "_id": cand_mapped_id,
                         "_id_ext": cand_external_id,
@@ -541,8 +542,20 @@ def conv_bt_json(j:Dict, bt:str):
                 contj['choices'].extend(added_contcand[external_id])
 
             candlist = ' '.join(candids)
-            if not found and _type == "office":
-                contj['writein_lines'] = writein_lines
+            if not found and (_type == "office" or _type == "measure"):
+                if _type == "office":
+                    contj['writeins_allowed'] = writein_lines
+                if isrcv:
+                    if writein_lines:
+                        contj['result_style'] = 'EMRW'
+                    else:
+                        contj['result_style'] = 'EMR'
+                else:
+                    if writein_lines:
+                        contj['result_style'] = 'EMSW'
+                    else:
+                        contj['result_style'] = 'EMS'
+
 
             if external_id not in candorder:
                 candorder[external_id] = {}
@@ -682,6 +695,8 @@ if os.path.isfile("candlist-fix.tsv"):
                 candj['candidate_party'] = str2istr(party)
             if designation:
                 candj['ballot_designation'] = str2istr(designation)
+            if cand_type == "writein":
+                candj['is_writein'] = True
             if cont_external_id not in added_contcand:
                 added_contcand[cont_external_id] = []
             added_contcand[cont_external_id].append(candj)
@@ -824,6 +839,6 @@ outj.update(basejson)
 
 
 
-with open("election.json",'w') as outfile:
+with open(f"{OUT_DIR}/election.json",'w') as outfile:
     json.dump(outj, outfile, **json_dump_args)
 

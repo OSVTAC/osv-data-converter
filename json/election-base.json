@@ -55,28 +55,42 @@
             "_id": "EMS",
             "description": "Plurality voting, subtotal by Election Day/VBM",
             "is_rcv": false,
-            "result_stat_type_ids": "RSEli RSReg RSCst RSRej RSUnc RSOVR RSUnd RSTot",
+            "result_stat_type_ids": "RSReg RSCst RSRej RSOvr RSUnd RSTot",
             "voting_group_ids": "TO ED MV"
         },
         {
             "_id": "EMSW",
             "description": "Plurality voting, subtotal by Election Day/VBM, with writeins",
             "is_rcv": false,
-            "result_stat_type_ids": "RSEli RSReg RSCst RSRej RSUnc RSOVR RSUnd RSTot RSWri",
+            "result_stat_type_ids": "RSReg RSCst RSRej RSOvr RSUnd RSTot RSWri",
             "voting_group_ids": "TO ED MV"
         },
         {
             "_id": "EMR",
             "description": "RCV voting, subtotal by Election Day/VBM",
             "is_rcv": true,
-            "result_stat_type_ids": "RSEli RSReg RSCst RSRej RSUnc RSOVR RSUnd RSExh RSTot",
+            "result_stat_type_ids": "RSReg RSCst RSRej RSOvr RSUnd RSExh RSTot",
             "voting_group_ids": "TO ED MV"
         },
         {
             "_id": "EMRW",
             "description": "RCV voting, subtotal by Election Day/VBM, with writeins",
             "is_rcv": true,
-            "result_stat_type_ids": "RSEli RSReg RSCst RSRej RSUnc RSOVR RSUnd RSExh RSTot RSWri",
+            "result_stat_type_ids": "RSReg RSCst RSRej RSOvr RSUnd RSExh RSTot RSWri",
+            "voting_group_ids": "TO ED MV"
+        },
+        {
+            "_id": "EMTE",
+            "description": "Turnout, subtotal by Election Day/VBM, with Eligible",
+            "is_rcv": true,
+            "result_stat_type_ids": "RSEli RSReg RSCst RSRej",
+            "voting_group_ids": "TO ED MV"
+        },
+        {
+            "_id": "EMT",
+            "description": "Turnout, subtotal by Election Day/VBM",
+            "is_rcv": true,
+            "result_stat_type_ids": "RSReg RSCst RSRej",
             "voting_group_ids": "TO ED MV"
         }
     ],

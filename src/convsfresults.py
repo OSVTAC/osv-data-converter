@@ -64,15 +64,17 @@ VERSION='0.0.1'     # Program version
 SF_ENCODING = 'ISO-8859-1'
 SF_HTML_ENCODING = 'UTF-8'
 
+OUT_DIR = "../out-orr/resultdata"
+
 DEFAULT_JSON_DUMP_ARGS = dict(sort_keys=True, separators=(',\n',':'), ensure_ascii=False)
 PP_JSON_DUMP_ARGS = dict(sort_keys=True, indent=4, ensure_ascii=False)
 
 # Result Stats by type
 resultlistbytype = {}
 for line in """\
-CW=RSReg RSCst RSRej RSUnc RSOvr RSUnd RSTot RSWri
-RW=RSReg RSCst RSRej RSUnc RSOvr RSUnd RSExh RSTot RSWri
-C=RSReg RSCst RSRej RSUnc RSOvr RSUnd RSTot""".split('\n'):
+CW=RSReg RSCst RSRej RSOvr RSUnd RSTot RSWri
+RW=RSReg RSCst RSRej RSOvr RSUnd RSExh RSTot RSWri
+C=RSReg RSCst RSRej RSOvr RSUnd RSTot""".split('\n'):
     name, resnames = line.split('=')
     resultlistbytype[name] = resnames.split(' ')
 
@@ -244,7 +246,7 @@ def  flushcontest(contest_order, contest_id, contest_name,
     """
     Write out the results detail file for a contest
     """
-    filename = f'results-{contest_id}.tsv'
+    filename = f'{OUT_DIR}/results-{contest_id}.tsv'
     with open(filename,'w') as outfile:
         if separator != "|":
             headerline = re.sub(r'\|', separator, headerline)
@@ -256,8 +258,8 @@ def  flushcontest(contest_order, contest_id, contest_name,
 
 re2c = re2('')
 
-#RW=RSReg RSCst RSRej RSUnc RSOvr RSUnd RSExh RSTot RSWri
-#    x     x     x     x      0    1      2     3     4
+#RW=RSReg RSCst RSRej RSOvr RSUnd RSExh RSTot RSWri
+#    x     x     x      0    1      2     3     4
 rcvLabelMap = {
     'WRITE-IN':4,
     'Exhausted by Over Votes':0,
@@ -864,14 +866,13 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     RSCst = str(total_ballots)
                 else:
                     RSRej = str(int(RSCst)-total_ballots)
-                RSUnc = "0"
 
                 if hasrcv:
                     stats = [area_id, subtotal_type, RSReg, RSCst,
-                            RSRej, RSUnc, RSOvr, RSUnd, RSExh, RSTot]
+                            RSRej, RSOvr, RSUnd, RSExh, RSTot]
                 else:
                     stats = [area_id, subtotal_type, RSReg, RSCst,
-                            RSRej, RSUnc, RSOvr, RSUnd, RSTot]
+                            RSRej, RSOvr, RSUnd, RSTot]
                 if haswritein:
                     stats.append(cols[writein_col])
                     stats.extend(cols[7:writein_col])
@@ -951,7 +952,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
         # End Loop over input lines
 
         # Put the json contest status
-        with open("contest-status.json",'w') as outfile:
+        with open(f"{OUT_DIR}/contest-status.json",'w') as outfile:
             json.dump(contest_status_json, outfile, **json_dump_args)
 
         # Put the precinct consolidation file
