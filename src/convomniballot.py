@@ -542,7 +542,7 @@ def conv_bt_json(j:Dict, bt:str):
                 contj['choices'].extend(added_contcand[external_id])
 
             candlist = ' '.join(candids)
-            if not found and (_type == "office" or _type == "measure"):
+            if not found and contest_type != "header" and contest_type != "text":
                 if _type == "office":
                     contj['writeins_allowed'] = writein_lines
                 if isrcv:
