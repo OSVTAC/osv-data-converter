@@ -399,7 +399,7 @@ def conv_bt_json(j:Dict, bt:str):
         if len(paragraphs)>1:
             raise FormatError(f"Multiple text paragraphs for {sequence}:{title}")
 
-        if external_id in contmap:
+        if contmap.get(external_id,"") != "":
             mapped_id = contmap[external_id]
         else:
             mapped_id = external_id
@@ -419,7 +419,7 @@ def conv_bt_json(j:Dict, bt:str):
                     "_id": sequence,
                     "classification": classification,
                     "header_id": header_id,
-                    "ballot_title": titles }
+                    "ballot_title": titles[0] }
                 if paragraphs:
                     hj["heading_text"] = paragraphs[0]
 
@@ -433,6 +433,11 @@ def conv_bt_json(j:Dict, bt:str):
                 has_question =  _type == 'question' or _type == 'retention'
 
                 # TODO: lookup voting district and compute result style
+
+                # Skip contest with no choices (canceled)
+                # TODO: include with type canceled
+                if not "options" in box:
+                    continue
 
                 contj = contestjson[sequence] = {
                     "_id": mapped_id,
@@ -564,7 +569,12 @@ def conv_bt_json(j:Dict, bt:str):
             else:
                 order = candorder[external_id][candlist]
             order.append(bt)
-        # End processing options
+            # End Contest with a list of choices
+        elif not found and contest_type != "header" and contest_type != "text":
+            # Contest with no choices
+            contj['result_style'] = 'EMS'
+            contj['_type'] = "canceled"
+
     # End loop over boxes
     # Put the contests found for this bt
     newtsvline(btcontlines, bt, ' '.join(contlist))
