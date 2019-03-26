@@ -36,13 +36,14 @@ VERSION='0.0.1'     # Program version
 DFM_ENCODING = 'ISO-8859-1'
 OUT_ENCODING = 'UTF-8'
 
-CONFIG_FILE = "config-matchcand.yaml"
+#CONFIG_FILE = "config-matchcand.yaml"
 
 # namedtuple represents a list of a subrecord type
 config_fileinfo = {
         "filename": str,            # tsv input file
         "file_type": str,           # (contest|candidate)[-master]
         "contest_id_col": str,      # contest ID column
+        "district_id_col": str,     # district ID column
         "contest_name_col": str,    # contest name column (contest file)
         "contest_text_col": str,    # contest question text column (contest file)
         "contest_type_col": str,    # contest type column (contest file)
@@ -53,7 +54,8 @@ config_fileinfo = {
         }
 
 config_attrs = {
-    "files": [ namedtuple('FileInfo',config_fileinfo.keys())(*config_fileinfo.values()) ]
+    "files": [ namedtuple('FileInfo',config_fileinfo.keys())(*config_fileinfo.values()) ],
+    "default_district_id": str
     }
 
 def parse_args():
@@ -70,6 +72,8 @@ def parse_args():
                         help='enable verbose warnings')
     parser.add_argument('-D', '--debug', action='store_true',
                         help='enable debug logging')
+    parser.add_argument('-S', '--suffix', default="",
+                        help='suffix for config and output files')
     parser.add_argument('-p', dest='pipe', action='store_true',
                         help='use pipe separator else tab')
 
@@ -82,18 +86,18 @@ args = parse_args()
 if args.debug:
     logging.basicConfig(level=logging.DEBUG)
 
-config = Config(CONFIG_FILE, valid_attrs=config_attrs, debug=args.debug)
-
-
 candmap_header = "contest_id2|cand_id2|contest_id1|cand_id1|cand_name2|cand_name1"
 contmap_header = "contest_id2|contest_id1|contest_name2|contest_name1"
+distmap_header = "contest_id2|contest_id1|district_id"
 
 separator = "|" if args.pipe else "\t"
 
 
-config = Config(CONFIG_FILE, valid_attrs=config_attrs)
+config = Config(f"config-matchcand{args.suffix}.yaml", valid_attrs=config_attrs)
 
 m = CandContMatch(debug=args.debug)
+
+distmap = {}
 
 for f in config.files:
     # Loop over input files
@@ -117,6 +121,9 @@ for f in config.files:
             cont_id = d[f.contest_id_col]
             if not cont_id:
                 continue    # Skip null contest IDs
+
+            if f.district_id_col:
+                distmap[cont_id] = d[f.district_id_col]
 
             if f.contest_name_col:
                 # Handle contest definition
@@ -171,12 +178,18 @@ if not m.check_nocand_contests():
         print(f"{i} {m.cont_id2name[i]}")
 
 # contmap_header = "contest_id2|contest_id1|contest_name"
-with TSVWriter("contmap.tsv", sep=separator,
+with TSVWriter(f"contmap{args.suffix}.tsv", sep=separator,
                sort=False, header=contmap_header) as w:
     for id2,id1 in sorted(m.cont_map.items()):
         w.addline(id2, id1, m.cont_id2name[id2], m.cont_idname[id1])
     for id2 in m.unmapped_cont_id2s:
         w.addline(id2, "", m.cont_id2name[id2], "")
+
+if len(distmap):
+    with TSVWriter(f"distmap{args.suffix}.tsv", sep=separator,
+                sort=False, header=distmap_header) as w:
+        for id2,id1 in sorted(m.cont_map.items()):
+            w.addline(id2, id1, distmap.get(id1,config.default_district_id))
 
 m.resolve_candidates()
 
@@ -190,7 +203,7 @@ if m.unmapped_candinfo2:
     for i in m.unmapped_candinfo2:
         print(f"{i['cand_id']} {i['cand_name']}")
 
-with TSVWriter("candmap.tsv", sep=separator,
+with TSVWriter(f"candmap{args.suffix}.tsv", sep=separator,
                sort=False, header=candmap_header) as w:
     for id2,id1 in sorted(m.cand_map.items()):
         cont_id1,cand_id1 = id1.split('.')

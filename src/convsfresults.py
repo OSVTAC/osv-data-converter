@@ -750,6 +750,10 @@ with ZipFile("resultdata-raw.zip") as rzip:
 
                 if skip: continue
                 # Set column values used below
+                # cols: 0:PrecinctName|1:ReportingType|2:PrecinctID|3:Precincts|
+                #   4:Registration|5:Ballots Cast|6:Turnout (%)|
+                #   7:CARMEN CHU|8:PAUL BELLAR|9:WRITE-IN|10:Under Vote|11:Over Vote
+
                 (RSReg, RSCst) = cols[4:6]
                 (RSUnd, RSOvr) = cols[-2:]
                 no_voter_precinct = RSReg=="0"
@@ -874,9 +878,9 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     stats = [area_id, subtotal_type, RSReg, RSCst,
                             RSRej, RSOvr, RSUnd, RSTot]
                 if haswritein:
-                    stats.append(cols[writein_col])
-                    stats.extend(cols[7:writein_col])
-                    stats.extend(cols[writein_col+1:-2])
+                    stats.append(cols[writein_col]) # First write-in
+                    stats.extend(cols[7:writein_col]) # Regular candidates
+                    stats.extend(cols[writein_col+1:-2]) # Named write-in
                 else:
                     stats.extend(cols[7:-2])
                 outline = jointsvline(*stats)
@@ -891,8 +895,9 @@ with ZipFile("resultdata-raw.zip") as rzip:
 
                         # Save/Check total [s for results summary
                         if hasrcv:
+                            # stats:subtotal_type, RSReg, RSCst, RSRej,
                             contest_rcvlines = loadRCVData(
-                                rzip, contest_name, candnames, stats[1:6])
+                                rzip, contest_name, candnames, stats[1:5])
                         else:
                             contest_rcvlines = []
                         rcv_rounds = len(contest_rcvlines)

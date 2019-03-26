@@ -550,6 +550,8 @@ def conv_bt_json(j:Dict, bt:str):
             if not found and contest_type != "header" and contest_type != "text":
                 if _type == "office":
                     contj['writeins_allowed'] = writein_lines
+                if external_id in distmap:
+                    contj['voting_district'] = distmap[external_id]
                 if isrcv:
                     if writein_lines:
                         contj['result_style'] = 'EMRW'
@@ -672,6 +674,12 @@ else:
     have_contmap = False
     contmap = {}
 
+if os.path.isfile("distmap.ems.tsv"):
+    with TSVReader("distmap.ems.tsv") as r:
+        distmap = r.load_simple_dict(0,2)
+else:
+    distmap = {}
+
 # Check for a candidate map
 if config.candidate_map_file:
     have_candmap = True
@@ -789,7 +797,7 @@ with TSVReader("../ems/pctcons.tsv") as r:
         (cons_precinct_id, cons_precinct_name, is_vbm, no_voters,
          precinct_ids) = cols
         area = {
-            "_id": cons_precinct_id,
+            "_id": "PCT"+cons_precinct_id,
             "classification": "Precinct",
             "name": cons_precinct_name,
             "short_name": cons_precinct_name
@@ -801,16 +809,25 @@ with TSVReader("../ems/pctcons.tsv") as r:
             no_voter_precincts.append(cons_precinct_id)
         arealist.append(area)
 
+# Load the result groups by district
+if os.path.isfile("reporting_groups.tsv"):
+    with TSVReader("reporting_groups.tsv") as r:
+        reporting_groups_by_distid = r.load_simple_dict(0,1)
+else:
+    reporting_groups_by_distid = {}
+
 with TSVReader("../ems/distnames.tsv") as r:
     if r.headerline != "District_Code|District_Name|District_Short_Name":
         raiseFormatError(f"Unmatched distnames.tsv header {r.headerline}")
     for cols in r.readlines():
         (District_Code, District_Name, District_Short_Name) = cols
+
         # TODO: Compute classification
         arealist.append({
             "_id": District_Code,
             "name": District_Name,
-            "short_name": District_Short_Name
+            "short_name": District_Short_Name,
+            "reporting_group_ids": reporting_groups_by_distid.get(District_Code,"")
         })
 
 
