@@ -127,6 +127,7 @@ with ZipFile("ems-raw.zip") as rzip:
                 iCandidateID = iCandidateID.zfill(3)
 
                 # Contact info not extracted now [TODO]
+                szCandidateName = szCandidateName.rstrip('*')
                 w.addline(iContestID, iCandidateID, szCandidateName,
                           szBallotDesignation, szPartyName, boolstr(iIncumbent),
                           boolstr(dtQualified != ""))
