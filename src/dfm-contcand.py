@@ -21,8 +21,8 @@ Reads the following files:
   * ems-raw.zip/CFMJ001_ContestCandidateData.tsv
 
 Creates the following files:
-  * contlist.tsv
-  * candlist.tsv
+  * contlist-orig.tsv
+  * candlist-orig.tsv
 """
 VERSION='0.0.1'     # Program version
 

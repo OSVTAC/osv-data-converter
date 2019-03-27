@@ -239,7 +239,7 @@ f"Mismatch map2 for {contest_id} -> {self.cont_map2[contest_id]} + {contest_id2}
 
 
     def set_cand_map(self,
-                        cand_id2:str, # soource cand id/name
+                        cand_id2:str, # source cand id/name
                         cand_id:str): # target cand id/name
         """
         Enter a source->target mapping found. If there is a mismatch on the
@@ -247,10 +247,10 @@ f"Mismatch map2 for {contest_id} -> {self.cont_map2[contest_id]} + {contest_id2}
         """
         if check_mismatch(self.cand_map, cand_id2, cand_id):
             self.conflicts.append(
-f"Mismatch candidate map for {cand_id2} -> {self.cont_map[cand_id2]} + {cand_id}")
+f"Mismatch candidate map for {cand_id2} -> {self.cont_map.get(cand_id2,'<NO-NAME>')} + {cand_id}")
         if check_mismatch(self.cand_map2, cand_id, cand_id2):
             self.conflicts.append(
-f"Mismatch candidate map2 for {cand_id} -> {self.cont_map2[cand_id]} + {cand_id2}")
+f"Mismatch candidate map2 for {cand_id} -> {self.cont_map2.get(cand_id2,'<NO-NAME>')} + {cand_id2}")
 
 
     def lookup_cand(self,

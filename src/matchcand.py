@@ -49,6 +49,7 @@ config_fileinfo = {
         "contest_type_col": str,    # contest type column (contest file)
         "skip_contest_types": config_whole_pattern_list,  # Regex to match skipped types
         "candidate_id_col": str,    # candidate ID column (candidate_file)
+        "candidate_seq_col": str,   # candidate sequence column (candidate_file)
         "candidate_name_col": str,  # candidate name column (candidate_file)
         "question_pats": config_whole_pattern_map   # mapping of question names
         }
@@ -86,7 +87,7 @@ args = parse_args()
 if args.debug:
     logging.basicConfig(level=logging.DEBUG)
 
-candmap_header = "contest_id2|cand_id2|contest_id1|cand_id1|cand_name2|cand_name1"
+candmap_header = "contest_id2|cand_id2|contest_id1|cand_id1|cand_seq|cand_name2|cand_name1"
 contmap_header = "contest_id2|contest_id1|contest_name2|contest_name1"
 distmap_header = "contest_id2|contest_id1|district_id"
 
@@ -98,6 +99,7 @@ config = Config(f"config-matchcand{args.suffix}.yaml", valid_attrs=config_attrs)
 m = CandContMatch(debug=args.debug)
 
 distmap = {}
+candseq = {}
 
 for f in config.files:
     # Loop over input files
@@ -156,6 +158,8 @@ for f in config.files:
                     m.enter_cand(cont_id, cand_id, cand_name)
                 else:
                     m.lookup_cand(cont_id, cand_id, cand_name)
+                if f.candidate_seq_col:
+                    candseq[cand_id] =d[f.candidate_seq_col]
             # End candidate definition
         # End loop over input records
     # End processing f.filename
@@ -178,10 +182,14 @@ if not m.check_nocand_contests():
         print(f"{i} {m.cont_id2name[i]}")
 
 # contmap_header = "contest_id2|contest_id1|contest_name"
+found_map = {}
 with TSVWriter(f"contmap{args.suffix}.tsv", sep=separator,
                sort=False, header=contmap_header) as w:
     for id2,id1 in sorted(m.cont_map.items()):
+        if id1 in found_map:
+            print(f"ERROR:Duplicate {id1}:->{found_map[id1]}, {id2}\n")
         w.addline(id2, id1, m.cont_id2name[id2], m.cont_idname[id1])
+        found_map[id1] = id2
     for id2 in m.unmapped_cont_id2s:
         w.addline(id2, "", m.cont_id2name[id2], "")
 
@@ -209,6 +217,7 @@ with TSVWriter(f"candmap{args.suffix}.tsv", sep=separator,
         cont_id1,cand_id1 = id1.split('.')
         cont_id2,cand_id2 = id2.split('.')
         w.addline(cont_id2,cand_id2, cont_id1,cand_id1,
+                  candseq.get(id1,""),
                   m.cand_id2name.get(id2,""), m.cand_idname.get(id1,""))
 
 

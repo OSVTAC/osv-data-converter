@@ -355,7 +355,9 @@ def conv_bt_json(j:Dict, bt:str):
             paragraphs = lastrcvtext
             lastrcvtitle = lastrcvtext = None
             isrcv = True
-        elif external_id.endswith('-rcheader'):
+        elif (external_id.endswith('-rcheader') or
+              (len(paragraphs)==1 and
+               paragraphs[0].get('en',"").startswith('You may rank up to'))):
             # Save the title and heading for contest that follows
             lastrcvtitle = titles
             lastrcvtext = paragraphs
@@ -501,6 +503,7 @@ def conv_bt_json(j:Dict, bt:str):
                     cand_mapped_id = cand_external_id
                 candids.append(cand_external_id)
                 cand_seq = str(o["sequence"]).zfill(3)
+                cand_mapped_seq = candseq.get(cand_external_id,cand_seq)
                 cand_names = conv_titles(o["titles"])
                 designation = party = ""
                 designation_istr = party_istr = None
@@ -534,6 +537,7 @@ def conv_bt_json(j:Dict, bt:str):
                         "_id": cand_mapped_id,
                         "_id_ext": cand_external_id,
                         "ballot_title": cand_names[0],
+                        "sequence": cand_mapped_seq
                         }
                     if party_istr:
                         candj['candidate_party'] = party_istr
@@ -541,6 +545,10 @@ def conv_bt_json(j:Dict, bt:str):
                         candj['ballot_designation'] = designation_istr
                     contj['choices'].append(candj)
             # End loop over contest choices
+            # Sort by sequence
+            if not found and "options" in box:
+                contj['choices'] = sorted(contj['choices'],
+                                      key=lambda c:c['sequence'])
             # Insert manually added candidates
             if not found and external_id in added_contcand:
                 print(f"external_id={external_id} in added_contcand")
@@ -681,13 +689,20 @@ else:
     distmap = {}
 
 # Check for a candidate map
+candmap = {}
+candseq = {}
 if config.candidate_map_file:
     have_candmap = True
+    candmap_header = "contest_id2|cand_id2|contest_id1|cand_id1|cand_seq|"\
+        "cand_name2|cand_name1"
     with TSVReader(config.candidate_map_file) as r:
-        candmap = r.load_simple_dict(1,3)
+        if r.headerline != candmap_header:
+            raiseFormatError(f"Unmatched {config.candidate_map_file} header {r.headerline}")
+        for cols in r.readlines():
+            candmap[cols[1]] = cols[3]
+            candseq[cols[1]] = cols[4]
 else:
     have_candmap = False
-    candmap = {}
 
 
 #Check for added candidates (including write-in)

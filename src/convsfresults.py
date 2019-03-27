@@ -1037,7 +1037,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
             candlist_sov.append(cont_id_eds2sov[contest_id_eds]+
                                 separator+l)
         putfile("candlist-sov.tsv",
-                "contest_id|candidate_order|contest_id_eds|candidate_id|candidate_type|candidate_full_name|candidate_party_id|is_writein_candidate",
+                "contest_id|contest_id_eds|candidate_order|candidate_id|candidate_type|candidate_full_name|candidate_party_id|is_writein_candidate",
                 candlist_sov)
 
         putfile("pctturnout.tsv",
