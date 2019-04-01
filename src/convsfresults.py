@@ -30,6 +30,7 @@ import os.path
 import re
 import argparse
 import struct
+import operator, functools
 
 # Local file imports
 from tsvio import TSVReader
@@ -352,9 +353,23 @@ def loadRCVData(rzip,                   # zipfile context
         # Transpose the data to decreasing RCV rounds
         rcvrounds = len(rcvtable[3])
 
-        for i in range(rcvrounds,0,-1):
-            area_id = f'RCV{i}'
-            cols = [area_id]+statprefix+[ rcvtable[j][i-1]
+        # Check duplicate
+        if rcvrounds>1:
+            dup = 1
+            for j in range(len(rcvtable)):
+                if rcvtable[j][0] != rcvtable[j][1]:
+                    dup = 0
+                    break
+            if dup==0:
+                print(f"Not duplicated: {contest_name}\n")
+        else:
+            dup = 0
+
+        for i in range(rcvrounds,dup,-1):
+            area_id = f'RCV{i-dup}'
+            cols = [area_id]+statprefix+[ (rcvtable[j][i-1]
+                                        if i<=1+dup or rcvtable[j][i-1] != '0'
+                                        else '')
                                          for j in range(len(rcvtable)) ]
             newtsvline(rcvlines, *cols)
         # End loop over rcv rounds
@@ -1016,7 +1031,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
             checkDuplicate(pctturnout_mv, name, ev_turnout,
                                         "Vote-By-Mail Turnout")
 
-            newtsvline(pctturnout, pctname2areaid[name],
+            newtsvline(pctturnout, pctname2areaid[name], reg,
                        turnout, ed_turnout, ev_turnout)
 
             reg_total += int(reg)
