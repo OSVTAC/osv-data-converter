@@ -125,6 +125,10 @@ def parse_args():
                         help='use pipe separator else tab')
     parser.add_argument('-P', dest='pretty', action='store_true',
                         help='pretty-print json output')
+    parser.add_argument('-Z', dest='zero', action='store_true',
+                        help='make a zero report')
+    parser.add_argument('-s', dest='dirsuffix',
+                        help='set the output directory (../out-orr default)')
     parser.add_argument('-z', dest='withzero', action='store_true',
                         help='include precincts with zero voters')
 
@@ -169,6 +173,14 @@ def strnull(x:str)->str:
 
 
 args = parse_args()
+
+if args.dirsuffix:
+    OUT_DIR = OUT_DIR+'-'+args.dirsuffix
+elif args.zero:
+    OUT_DIR = OUT_DIR+'-zero'
+
+if not os.path.exists(OUT_DIR):
+    os.makedirs(OUT_DIR)
 
 json_dump_args = PP_JSON_DUMP_ARGS if args.pretty else DEFAULT_JSON_DUMP_ARGS
 
@@ -497,6 +509,10 @@ with ZipFile("resultdata-raw.zip") as rzip:
             overvote, is_winner, cf_cand_class, is_precinct_level, precinct_name,
             is_visible) = line.split('\t')
 
+            if args.zero:
+                processed_done = total = contest_total = 0
+                undervote = overvote = 0
+
             if contest_id == "0":
                 # Registration & Turnout has county total
                 if candidate_id == "1":
@@ -769,6 +785,9 @@ with ZipFile("resultdata-raw.zip") as rzip:
                 #   4:Registration|5:Ballots Cast|6:Turnout (%)|
                 #   7:CARMEN CHU|8:PAUL BELLAR|9:WRITE-IN|10:Under Vote|11:Over Vote
 
+                if args.zero:
+                    for i in range(5,len(cols)):
+                        cols[i] = "0"
                 (RSReg, RSCst) = cols[4:6]
                 (RSUnd, RSOvr) = cols[-2:]
                 no_voter_precinct = RSReg=="0"
@@ -909,7 +928,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         contest_totallines.insert(0, outline)
 
                         # Save/Check total [s for results summary
-                        if hasrcv:
+                        if hasrcv and not args.zero:
                             # stats:subtotal_type, RSReg, RSCst, RSRej,
                             contest_rcvlines = loadRCVData(
                                 rzip, contest_name, candnames, stats[1:5])
