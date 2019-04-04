@@ -365,6 +365,12 @@ def loadRCVData(rzip,                   # zipfile context
         # Transpose the data to decreasing RCV rounds
         rcvrounds = len(rcvtable[3])
 
+        if args.zero:
+            rcvrounds = 1
+            cols = ['RCV1']+statprefix+['0']*len(rcvtable)
+            newtsvline(rcvlines, *cols)
+            return rcvlines
+
         # Check duplicate
         if rcvrounds>1:
             dup = 1
@@ -928,7 +934,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         contest_totallines.insert(0, outline)
 
                         # Save/Check total [s for results summary
-                        if hasrcv and not args.zero:
+                        if hasrcv:
                             # stats:subtotal_type, RSReg, RSCst, RSRej,
                             contest_rcvlines = loadRCVData(
                                 rzip, contest_name, candnames, stats[1:5])
