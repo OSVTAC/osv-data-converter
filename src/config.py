@@ -158,6 +158,28 @@ def config_whole_pattern_map(l:List[str])->Pattern:
     return [reform_regex_map(i,True) for i in l]
 
 
+def config_strlist_dict(d:Dict[str,List[str]])->Dict[str,List[str]]:
+    """
+    Joins a list of simple patterns
+    """
+    if d is None:
+        d = {} # Default is an empty dict
+    elif not isinstance(d,dict):
+        raise InvalidConfig(f"Invalid Config Dictionary")
+    else:
+        # Validate each dict entry as list of str
+        for k,v in d.items():
+            if v is None:
+                d[k] = v = []
+            if not isinstance(k,str) or not isinstance(v,list):
+                raise InvalidConfig(f"Invalid Config Entry")
+            for i in v:
+                if not isinstance(i,str):
+                    raise InvalidConfig(f"Invalid Config Entry")
+
+    return d
+
+
 def eval_config_pattern(v:str,                  # Value to test
                         patlist:List[Pattern]   # List of patterns to try
                         )->Match:               # Returns the Match found
@@ -276,7 +298,7 @@ class Config:
     def __init__(self,
                  config_file_name:str=DEFAULT_CONFIG_FILE_NAME, # File to load
                  root_config_file_name:str=None,    # System-wide defaults
-                 valid_attrs:Dict=None,             # List of attributes [TODO]
+                 valid_attrs:Dict=None,             # List of attributes
                  default_config:Dict=None,          # Built-in defaults
                  debug=False):  # Print debug log of data found
         """

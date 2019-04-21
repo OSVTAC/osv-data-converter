@@ -33,7 +33,8 @@ import os
 import os.path
 import re
 
-from config import Config, config_pattern_list, eval_config_pattern
+from config import (Config, config_pattern_list, eval_config_pattern,
+                    config_strlist_dict, InvalidConfig)
 from tsvio import TSVReader
 from re2 import re2
 
@@ -66,8 +67,11 @@ config_attrs = {
     "retention_pats": config_pattern_list,  # Match retention candidate names
     "bt_digits": int,
     "contest_map_file": str,
-    "candidate_map_file": str
+    "candidate_map_file": str,
+    "approval_required": config_strlist_dict
     }
+
+APPROVAL_REQUIRED_PAT = re.compile('^(Majority|\d/\d|\d\d%)$')
 
 DEFAULT_JSON_DUMP_ARGS = dict(sort_keys=False, separators=(',\n',':'), ensure_ascii=False)
 PP_JSON_DUMP_ARGS = dict(sort_keys=False, indent=4, ensure_ascii=False)
@@ -98,6 +102,7 @@ def parse_args():
     args = parser.parse_args()
 
     return args
+
 
 def putfile(
     filename: str,      # File name to be created
@@ -411,6 +416,7 @@ def conv_bt_json(j:Dict, bt:str):
             contlist.append(mapped_id)
 
         if not found:
+            approval_required = ''
             if contest_type == "header" or contest_type == "text":
                 # Process headers separately
                 lastheader = sequence
@@ -428,11 +434,13 @@ def conv_bt_json(j:Dict, bt:str):
                 # End process header
             else:
                 # Must be a contest
+                # TODO: Recall
                 _type = ("measure" if contest_type == "question" else
                         "office" if contest_type == "contest" else
                         contest_type) # retention
 
-                has_question =  _type == 'question' or _type == 'retention'
+                has_question =  (_type == 'question' or _type == 'retention'
+                                 or contest_type == "question")
 
                 # TODO: lookup voting district and compute result style
 
@@ -461,7 +469,16 @@ def conv_bt_json(j:Dict, bt:str):
                     if contest_type != "question" and contest_type != "retention":
                         raise FormatError(f"Unknown paragraph in {title}:{text}")
                     contj['question_text'] = paragraphs[0]
+
+                if has_question:
+                    approval_required = approval_required_by_title.get(
+                        title,"Majority")
+                    #print(f"approval_required[{title}]={approval_required}")
+                    contj['approval_required'] = approval_required
+                    approval_required_by_contest[contest_id] = approval_required
                 contj['choices'] = []
+        else:
+            approval_required = approval_required_by_contest.get(contest_id,'')
 
 
         if contest_type == "retention":
@@ -475,7 +492,8 @@ def conv_bt_json(j:Dict, bt:str):
         else:
             contest_candidate = ""
 
-        l = jointsvline(sequence,contest_type,contest_id,external_id,vote_for,title,text)
+        l = jointsvline(sequence,contest_type,contest_id,external_id,vote_for,title,text,
+                        approval_required)
         if found:
             if l != foundContest[contest_id]:
                 raise FormatError(f"Mismatched contest:\n  {l}  {foundContest[contest_id]}")
@@ -615,6 +633,18 @@ foundlang = { "en" }
 ballot_title = None
 election_date = None
 
+approval_required_by_title = {}  # Approval required by measure title
+approval_required_by_contest = {}
+
+# Invert the approval_required to make a lookup
+# Default will be "Majority"
+if config.approval_required:
+    for (approval, l) in config.approval_required.items():
+        if not APPROVAL_REQUIRED_PAT.match(approval):
+            raise InvalidConfig(f"Invalid Approval Required '{approval}'")
+        for i in l:
+            approval_required_by_title[i] = approval
+print("Approval req:",approval_required_by_title)
 
 
 # read the list of styles and precincts in LOOKUPS_URL saved to file lookups.json
@@ -779,7 +809,7 @@ putfile("controt-omni.tsv",
 # Write out the collected TSV data
 
 putfile("contlist-omni.tsv",
-        "sequence|type|contest_id|external_id|vote_for|title|text",
+        "sequence|type|contest_id|external_id|vote_for|title|text|approval_required",
         contestlines)
 
 putfile("candlist-omni.tsv",

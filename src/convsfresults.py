@@ -63,12 +63,16 @@ Creates the following files:
 VERSION='0.0.1'     # Program version
 
 SF_ENCODING = 'ISO-8859-1'
+SF_SOV_ENCODING ='UTF-8'
 SF_HTML_ENCODING = 'UTF-8'
 
 OUT_DIR = "../out-orr/resultdata"
 
 DEFAULT_JSON_DUMP_ARGS = dict(sort_keys=True, separators=(',\n',':'), ensure_ascii=False)
 PP_JSON_DUMP_ARGS = dict(sort_keys=True, indent=4, ensure_ascii=False)
+
+approval_fraction_pat = re2(r'^(\d+)/(\d+)$')
+approval_percent_pat = re2(r'^(\d+)%$')
 
 # Result Stats by type
 resultlistbytype = {}
@@ -233,11 +237,11 @@ def newtsvlineu(
     elif line !=foundHash[args[0]]:
         print("{errorPrefix} {linenum}:\n {foundHash[args[0]]}  {line}" )
 
-def decodeline(line):
+def decodeline(line, encoding=SF_ENCODING):
     global linenum
     linenum += 1
     try:
-        line = line.decode(SF_ENCODING).strip()
+        line = line.decode(encoding).strip()
     except:
         print(f"Can't decode {linenum}:{line}")
         return ""
@@ -389,10 +393,12 @@ def loadRCVData(rzip,                   # zipfile context
                                         if i<=1+dup or rcvtable[j][i-1] != '0'
                                         else '')
                                          for j in range(len(rcvtable)) ]
+            if i==rcvrounds:
+                final_cols = cols
             newtsvline(rcvlines, *cols)
         # End loop over rcv rounds
     # End processing html file
-    return rcvlines
+    return rcvlines, final_cols
 
 total_registration = 0
 total_precinct_ballots = 0
@@ -412,9 +418,23 @@ if have_contmap:
         contmap = r.load_simple_dict(0,1)
     with TSVReader("candmap.tsv") as r:
         candmap = r.load_simple_dict(0,1)
+have_contmap = os.path.isfile("../omniballot/contmap.tsv")
+if have_contmap:
+    with TSVReader("../omniballot/contmap.tsv") as r:
+        # Map ID to omniballot_id
+        contmap_omni = r.load_simple_dict(1,0)
+else:
+    contmap_omni = {}
+
 
 #Load countywide eligible voters
 eligible_voters = loadEligible()
+
+#Load approval_required
+with TSVReader("../omniballot/contlist-omni.tsv") as r:
+    approval_required_by_omni_id = r.load_simple_dict(3,7)
+
+#print("approval_required=",approval_required_by_omni_id)
 
 # Process the downloaded SF results stored in resultdata-raw.zip
 with ZipFile("resultdata-raw.zip") as rzip:
@@ -643,7 +663,8 @@ with ZipFile("resultdata-raw.zip") as rzip:
         # Skip to the 3rd line with reporting time
         linenum = 3
         for i in range(3):
-            line = f.readline().decode(SF_ENCODING).strip()
+            line = f.readline().decode(SF_SOV_ENCODING).strip()
+
         m = re.match(r'Report generated on: \w+, (\w+ \d\d?, 20\d\d at \d\d:\d\d:\d\d \w\w)',
                      line)
         if not m:
@@ -683,7 +704,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
 
         for line in f:
             # Loop over input lines
-            line = decodeline(line)
+            line = decodeline(line, SF_SOV_ENCODING)
             if (line == "" or line == "Precinct Totals" or line == contest_name_line
                 or line=="District and Neighborhood Totals"):
                 continue
@@ -729,6 +750,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                 contline = jointsvline(order, contest_id, contest_id_eds,
                             contest_name, vote_for, contest_type)
                 contlist.append(contline)
+                omni_id = contmap_omni.get(contest_id,contest_id)
                 continue
 
             cols = line.split('\t')
@@ -897,7 +919,8 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     subtotal_type = 'TO'
 
                 # Compute total votes
-                RSTot = str(sum(map(int,cols[7:-2])))
+                total_votes = sum(map(int,cols[7:-2]))
+                RSTot = str(total_votes)
 
                 # Compute ignored
                 RSExh = "0"
@@ -919,9 +942,11 @@ with ZipFile("resultdata-raw.zip") as rzip:
                             RSRej, RSOvr, RSUnd, RSTot]
                 if haswritein:
                     stats.append(cols[writein_col]) # First write-in
+                    cand_start_col = len(stats)
                     stats.extend(cols[7:writein_col]) # Regular candidates
                     stats.extend(cols[writein_col+1:-2]) # Named write-in
                 else:
+                    cand_start_col = len(stats)
                     stats.extend(cols[7:-2])
                 outline = jointsvline(*stats)
                 if area_id == "ALLPCTS":
@@ -936,11 +961,88 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         # Save/Check total [s for results summary
                         if hasrcv:
                             # stats:subtotal_type, RSReg, RSCst, RSRej,
-                            contest_rcvlines = loadRCVData(
+                            contest_rcvlines, final_cols = loadRCVData(
                                 rzip, contest_name, candnames, stats[1:5])
+                            candvotes = final_cols[cand_start_col:]
                         else:
                             contest_rcvlines = []
+                            candvotes = stats[cand_start_col:]
                         rcv_rounds = len(contest_rcvlines)
+                        winning_status = {}
+                        cand_success = {}   # True/False for winning_status
+
+                        if total_votes:
+                            approval_required = approval_required_by_omni_id.get(
+                                omni_id,'')
+                            if approval_required:
+                                # Set pass_fail status
+                                if approval_required == 'Majority':
+                                    votes_required = (total_votes//2) + 1
+                                elif approval_fraction_pat.match(approval_required):
+                                    (num, denom) = map(int, approval_fraction_pat.groups())
+                                    votes_required = (total_votes*num+denom-1)//denom
+                                elif approval_percent_pat.match(approval_required):
+                                    votes_required = ((total_votes*
+                                         approval_percent_pat.group(1)+00)//100)
+                                else:
+                                    votes_required = 0
+                                if votes_required:
+                                    if int(candvotes[0]) >= votes_required:
+                                        conteststat['success'] = True
+                                        win_id = candids[0]
+                                        lose_id = candids[1]
+                                    else:
+                                        conteststat['success'] = False
+                                        win_id = candids[1]
+                                        lose_id = candids[0]
+                                    winning_status[win_id] = 'W'
+                                    winning_status[lose_id] = 'N'
+                                    cand_success[win_id] = True
+                                    cand_success[lose_id] = False
+                            else:
+                                candvotes_by_id = zip(candids, candvotes)
+                                # Compute winners
+                                ranked_candvotes = sorted(candvotes_by_id,
+                                        key=lambda x: int(x[1]) if x[1] != '' else 0,
+                                        reverse=True)
+                                ncands = len(ranked_candvotes)
+                                # TODO: Conditional runoff
+                                # TODO: Handle RCV with more than one elected
+                                nwinners = 1 if hasrcv else vote_for
+                                has_runoff = False # TODO
+                                conditional_runoff_limit = 0
+                                runoff_status = True if has_runoff else ''
+                                if has_runoff:
+                                    nwinners += 1
+
+                                last_winner = None
+                                last_v = total_votes
+                                #print(f"ranked_candvotes {contest_id}:{contest_name}",
+                                    #ranked_candvotes)
+                                for c,v in ranked_candvotes:
+                                    if nwinners > 0:
+                                        # The next wins
+                                        # TODO: conditional runoff with vote_for>1
+                                        if conditional_runoff_limit:
+                                            if v>conditional_runoff_limit:
+                                                nwinners -= 1
+                                                runoff_status = False
+                                        winning_status[c] = 'R' if has_runoff else 'W'
+                                        nwinners -= 1
+                                        last_winner = c
+                                        last_v = v
+                                        cand_success[c] = True
+                                    elif v == last_v:
+                                        # Tie for winner
+                                        winning_status[last_winner] = 'T'
+                                        winning_status[c] = 'T'
+                                        cand_success[c] = True
+                                    elif hasrcv and not v:
+                                        winning_status[c] = 'E'
+                                        cand_success[c] = False
+                                    else:
+                                        winning_status[c] = 'N'
+                                        cand_success[c] = False
 
                         # Check precinct counts
                         total_precincts = precinct_count[contest_id_eds]
@@ -969,6 +1071,8 @@ with ZipFile("resultdata-raw.zip") as rzip:
                             conteststat['choices'].append({
                                 "_id": candid,
                                 "ballot_title": candnames[k],
+                                "winning_status": winning_status.get(candid,''),
+                                "success": cand_success.get(candid,''),
                                 "results":[totals[j][i] for j in range(ntotals)]
                                 })
                             i += 1
