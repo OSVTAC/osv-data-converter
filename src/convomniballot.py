@@ -40,7 +40,7 @@ from re2 import re2
 
 from datetime import datetime
 from collections import OrderedDict
-from typing import Union, List, Pattern, Match, Dict
+from typing import Union, List, Pattern, Match, Dict, Tuple
 
 DESCRIPTION = """\
 Convert data in omniballot sample ballots.
@@ -61,6 +61,39 @@ SF_HTML_ENCODING = 'UTF-8'
 
 OUT_DIR = "../out-orr"
 
+# Config file handling -----------------------
+
+def config_runoff(d:Dict)->List[Tuple]:
+    """
+    Validates the "runoff" config that converts:
+       date:
+         type:
+           - list of title patterns
+    into a list of:
+      (regex, date, type)
+    """
+    if d is None:
+        return []
+    runoff_pats = []
+    if not isinstance(d,dict):
+        raise InvalidConfig(f"Invalid Runoff Config")
+    for date, dt in d.items():
+        date = str(date)
+        if not (re.match(r'^20\d\d-\d\d-\d\d$', date) and
+                isinstance(dt,dict)):
+            raise InvalidConfig(f"Invalid Runoff Config")
+        for runoff_type, l in dt.items():
+            if not (re.match(r'(top_2|non_majority)$',runoff_type) and
+                    isinstance(l,list)):
+                raise InvalidConfig(f"Invalid Runoff Config")
+            regex = re.compile(f"({'|'.join(l)})")
+            runoff_pats.append((regex, date, runoff_type))
+    if args.verbose:
+        print("config_runoff=",runoff_pats)
+    return runoff_pats
+
+
+
 CONFIG_FILE = "config-omni.yaml"
 config_attrs = {
     "trim_sequence_prefix": str,            # prefix to chop
@@ -68,7 +101,8 @@ config_attrs = {
     "bt_digits": int,
     "contest_map_file": str,
     "candidate_map_file": str,
-    "approval_required": config_strlist_dict
+    "approval_required": config_strlist_dict,
+    "runoff": config_runoff
     }
 
 APPROVAL_REQUIRED_PAT = re.compile('^(Majority|\d/\d|\d\d%)$')
@@ -470,12 +504,22 @@ def conv_bt_json(j:Dict, bt:str):
                         raise FormatError(f"Unknown paragraph in {title}:{text}")
                     contj['question_text'] = paragraphs[0]
 
+
                 if has_question:
                     approval_required = approval_required_by_title.get(
                         title,"Majority")
                     #print(f"approval_required[{title}]={approval_required}")
                     contj['approval_required'] = approval_required
                     approval_required_by_contest[contest_id] = approval_required
+                else:
+                    for regex, runoff_date, runoff_type in config.runoff:
+                        if regex.search(title):
+                            contj['runoff_date'] = runoff_date
+                            contj['runoff_type'] = runoff_type
+                            newtsvline(runofflines, runoff_date, runoff_type,
+                                    mapped_id, external_id, title)
+
+                            break
                 contj['choices'] = []
         else:
             approval_required = approval_required_by_contest.get(contest_id,'')
@@ -619,6 +663,7 @@ contestlines = []   # Extracted contest definition lines
 candlines = []      # Extracted candidate definition lines
 btcontlines = []    # List of contest IDs for each ballot type
 btpctlines = []     # List of (consolidated) precincts by bt
+runofflines = []    # List of contests with a runoff
 
 candorder = {}      # List of candidate rotations by ballot type
 foundContest = {}   # Prior contest definition line
@@ -644,7 +689,7 @@ if config.approval_required:
             raise InvalidConfig(f"Invalid Approval Required '{approval}'")
         for i in l:
             approval_required_by_title[i] = approval
-print("Approval req:",approval_required_by_title)
+#print("Approval req:",approval_required_by_title)
 
 
 # read the list of styles and precincts in LOOKUPS_URL saved to file lookups.json
@@ -823,6 +868,10 @@ putfile("btcont-omni.tsv",
 putfile("btpct-omni.tsv",
         "ballot_type|cons_precinct_ids",
         btpctlines)
+
+putfile("runoff-omni.tsv",
+        "runoff_date|runoff_type|contest_id|external_id|title",
+        runofflines)
 
 # Build the area list
 arealist = [{

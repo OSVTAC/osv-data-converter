@@ -239,7 +239,7 @@ class TSVReader:
             if key in h:
                 _log.error(f"Duplicate key '{key}' at {self.path}:{self.line_num}")
                 continue;
-            h[k] = dict(zip(self.header,l))
+            h[key] = dict(zip(self.header,l))
         return h
 
     def load_simple_dict(self,

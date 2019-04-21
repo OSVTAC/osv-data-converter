@@ -83,6 +83,12 @@ C=RSReg RSCst RSRej RSOvr RSUnd RSTot""".split('\n'):
     name, resnames = line.split('=')
     resultlistbytype[name] = resnames.split(' ')
 
+winning_status_names = {
+    'W':'winning', 'X':'winning_failed_recall', 'T':'tied', 'C':'tied_winner',
+    'D':'tied_not_winner', 'R': 'to_runoff', 'S':'tied_selected_for_runoff',
+    'E':'rcv_eliminated', 'N':'not_winning', '':''
+}
+
 VOTING_STATS = OrderedDict([
     ('RSTot', 'Total Votes'),       # Sum of valid votes reported
     ('RSCst', 'Ballots Cast'),      # Ballot sheets submitted by voters
@@ -426,6 +432,12 @@ if have_contmap:
 else:
     contmap_omni = {}
 
+have_runoff = os.path.isfile("../omniballot/runoff-omni.tsv")
+if have_runoff:
+    with TSVReader("../omniballot/runoff-omni.tsv") as r:
+        runoff_by_contid = r.loaddict(2)
+else:
+    runoff_by_contid = {}
 
 #Load countywide eligible voters
 eligible_voters = loadEligible()
@@ -1009,8 +1021,14 @@ with ZipFile("resultdata-raw.zip") as rzip:
                                 # TODO: Conditional runoff
                                 # TODO: Handle RCV with more than one elected
                                 nwinners = 1 if hasrcv else vote_for
-                                has_runoff = False # TODO
+                                has_runoff = runoff_by_contid.get(contest_id, None)
                                 conditional_runoff_limit = 0
+                                if has_runoff:
+                                    runoff_type = has_runoff['runoff_type']
+                                    conteststat['to_runoff'] = True
+                                    if runoff_type == 'non_majority':
+                                        conditional_runoff_limit = (
+                                            (total_votes//2) + 1)
                                 runoff_status = True if has_runoff else ''
                                 if has_runoff:
                                     nwinners += 1
@@ -1024,9 +1042,11 @@ with ZipFile("resultdata-raw.zip") as rzip:
                                         # The next wins
                                         # TODO: conditional runoff with vote_for>1
                                         if conditional_runoff_limit:
-                                            if v>conditional_runoff_limit:
+                                            if int(v)>conditional_runoff_limit:
                                                 nwinners -= 1
                                                 runoff_status = False
+                                                if nwinners < 2:
+                                                    conteststat['to_runoff'] = False
                                         winning_status[c] = 'R' if has_runoff else 'W'
                                         nwinners -= 1
                                         last_winner = c
@@ -1071,7 +1091,8 @@ with ZipFile("resultdata-raw.zip") as rzip:
                             conteststat['choices'].append({
                                 "_id": candid,
                                 "ballot_title": candnames[k],
-                                "winning_status": winning_status.get(candid,''),
+                                "winning_status": winning_status_names[
+                                    winning_status.get(candid,'')],
                                 "success": cand_success.get(candid,''),
                                 "results":[totals[j][i] for j in range(ntotals)]
                                 })
