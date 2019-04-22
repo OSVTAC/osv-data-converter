@@ -44,6 +44,7 @@ TSV writing capability will be added later.
 import re
 from typing import Dict, Tuple, List, TextIO, Union
 from collections import OrderedDict
+import logging
 
 UTF8_ENCODING = 'utf-8'
 
@@ -68,6 +69,8 @@ map_csv_data = str.maketrans(CSV_SOURCE_CHAR_MAP,CSV_FILE_CHAR_MAP)
 unmap_csv_data = str.maketrans(CSV_FILE_CHAR_MAP,CSV_SOURCE_CHAR_MAP)
 
 class DuplicateError(Exception):pass # Error: mismatched duplicate
+
+_log = logging.getLogger(__name__)
 
 #--- Field manipulation routines
 
@@ -208,6 +211,8 @@ class TSVReader:
         Interator to read a file and return the split line lists.
         """
         for line in self.f:
+            if line.strip() == '':
+                continue
             self.line = line
             self.line_num += 1
             yield self.convline(line)
@@ -237,6 +242,7 @@ class TSVReader:
         for l in self.readlines():
             key = l[keycolumn]
             if key in h:
+                global _log
                 _log.error(f"Duplicate key '{key}' at {self.path}:{self.line_num}")
                 continue;
             h[key] = dict(zip(self.header,l))

@@ -50,6 +50,15 @@
             "heading": "Exhausted Ballots"
         }
     ],
+    "turnout": {
+        "_id": "TURNOUT",
+        "_type": "turnout",
+        "ballot_title": {
+            "en": "Registration and Turnout"
+        },
+        "voting_district": "0",
+        "result_style": "EMTE"
+    },
     "result_styles": [
         {
             "_id": "EMS",
@@ -82,14 +91,14 @@
         {
             "_id": "EMTE",
             "description": "Turnout, subtotal by Election Day/VBM, with Eligible",
-            "is_rcv": true,
+            "is_rcv": false,
             "result_stat_type_ids": "RSEli RSReg RSCst RSRej",
             "voting_group_ids": "TO ED MV"
         },
         {
             "_id": "EMT",
             "description": "Turnout, subtotal by Election Day/VBM",
-            "is_rcv": true,
+            "is_rcv": false,
             "result_stat_type_ids": "RSReg RSCst RSRej",
             "voting_group_ids": "TO ED MV"
         }

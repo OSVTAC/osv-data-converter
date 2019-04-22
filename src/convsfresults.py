@@ -25,6 +25,7 @@ Program to convert results download datasets for SF to ORR data format
 
 # Library References
 import json
+import logging
 import os
 import os.path
 import re
@@ -312,11 +313,12 @@ def loadEligible()->str:
     """
     try:
         with TSVReader("../vr/county.tsv") as reader:
-            eligible_by_county = reader.load_simple_dict(0,1)
-            return eligible_by_county.get("San Francisco","")
-    except:
-        return ""
-
+            for l in reader.readlines():
+                if l[0] == "San Francisco":
+                    return l[1]
+    except Exception as ex:
+        pass
+    return ""
 
 def loadRCVData(rzip,                   # zipfile context
                 contest_name:str,       # Contest name
@@ -411,6 +413,9 @@ total_precinct_ballots = 0
 total_mail_ballots = 0
 total_precincts = 0
 
+# Output file struct
+contest_status_json = []
+
 isrcv = set() # Contest IDs with RCV
 
 no_voter_precincts = set() # IDs for precincts with no registered voters
@@ -456,6 +461,9 @@ with ZipFile("resultdata-raw.zip") as rzip:
     zipfilenames = set()
     for info in rfiles:
         zipfilenames.add(info.filename)
+
+    # Read turnout details
+
 
     # Get the ID maps in masterlookup.txt
     # Has ID maps only for RCV contests
@@ -554,11 +562,11 @@ with ZipFile("resultdata-raw.zip") as rzip:
             if contest_id == "0":
                 # Registration & Turnout has county total
                 if candidate_id == "1":
-                    total_precinct_ballots = total
+                    total_precinct_ballots = int(total)
                 else:
-                    total_mail_ballots = total
+                    total_mail_ballots = int(total)
                 total_registration = contest_total
-                total_precincts = processed_done
+                total_precincts_reporting = processed_done
                 continue
 
 
@@ -687,6 +695,39 @@ with ZipFile("resultdata-raw.zip") as rzip:
         contest_order = 0
         contest_name = contest_name_line = ""
 
+        # Enter turnout
+        contest_status_json.append({
+            "_id": "TURNOUT",
+            "no_voter_precincts": [],
+            "precincts_reporting": total_precincts_reporting,
+            "total_precincts": total_precincts,
+            "reporting_time": report_time_str,
+            "result_stats": [
+                {
+                    "_id": "RSEli",
+                    "heading": "Eligible Voters",
+                    "results": [ eligible_voters, eligible_voters, eligible_voters]
+                },
+                {
+                    "_id": "RSReg",
+                    "heading": "Registered Voters",
+                    "results": [total_registration, total_registration, total_registration]
+                },
+                {
+                    "_id": "RSCst",
+                    "heading": "Ballots Cast",
+                    "results": [
+                        str(total_precinct_ballots+total_mail_ballots),
+                        str(total_precinct_ballots), str(total_mail_ballots)]
+                },
+                {
+                    "_id": "RSRej",
+                    "heading": "Ballots Challenged",
+                    "results": ["0","0","0"]
+                }
+            ]
+        })
+
         district_name_abbrs = set()
 
         # Load Neighborhood abbr mapping
@@ -711,8 +752,6 @@ with ZipFile("resultdata-raw.zip") as rzip:
         pctcontest = {}     # Collected precincts by contest
         cont_id_eds2sov = {}# Map an eds ID to sov ID
 
-        # Output file struct
-        contest_status_json = []
 
         for line in f:
             # Loop over input lines

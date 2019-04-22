@@ -511,7 +511,7 @@ def conv_bt_json(j:Dict, bt:str):
                     #print(f"approval_required[{title}]={approval_required}")
                     contj['approval_required'] = approval_required
                     approval_required_by_contest[contest_id] = approval_required
-                else:
+                elif config.runoff:
                     for regex, runoff_date, runoff_type in config.runoff:
                         if regex.search(title):
                             contj['runoff_date'] = runoff_date
