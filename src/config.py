@@ -151,6 +151,15 @@ def config_pattern_map(l:List[str])->List[PatternMap]:
     return list(map(reform_regex_map, l))
 
 
+def config_pattern_map_dict(d:Dict[str,List[str]])->Dict[str,List[PatternMap]]:
+    """
+    Processes a dictionary of config_pattern_map
+    """
+    for k in d.keys():
+        d[k] = config_pattern_map(d[k])
+    return d
+
+
 def config_whole_pattern_map(l:List[str])->Pattern:
     """
     Joins a list of simple patterns

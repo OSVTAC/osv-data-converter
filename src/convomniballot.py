@@ -28,15 +28,19 @@ to scan for the max ballot type to zero fill would be useful
 """
 
 import argparse
+import copy
 import json
 import os
 import os.path
 import re
 
+import nameutil
+
 from config import (Config, config_pattern_list, eval_config_pattern,
-                    config_strlist_dict, InvalidConfig)
-from tsvio import TSVReader
+                    config_strlist_dict, InvalidConfig,
+                    config_pattern_map_dict, eval_config_pattern_map)
 from re2 import re2
+from tsvio import TSVReader
 
 from datetime import datetime
 from collections import OrderedDict
@@ -60,6 +64,10 @@ SF_ENCODING = 'ISO-8859-1'
 SF_HTML_ENCODING = 'UTF-8'
 
 OUT_DIR = "../out-orr"
+
+# Skip title capitalizing upper case for these languages
+dont_uncapitalize_lang = {'zh'}
+lang_other = ['es','tl','zh']
 
 # Config file handling -----------------------
 
@@ -102,7 +110,8 @@ config_attrs = {
     "contest_map_file": str,
     "candidate_map_file": str,
     "approval_required": config_strlist_dict,
-    "runoff": config_runoff
+    "runoff": config_runoff,
+    "contest_name_corrections": config_pattern_map_dict
     }
 
 APPROVAL_REQUIRED_PAT = re.compile('^(Majority|\d/\d|\d\d%)$')
@@ -286,6 +295,17 @@ Notes on the omniballot json (per ballot type or composite):
                             "value": "Businessman / Taxpayer Advocate"
 '''
 
+def get_dict_entry(node, keylist:List[str]):
+    """
+    If the node is a dict and the has the key, return it's value else None.
+    Supports a nested search of keys.
+    """
+    for key in keylist:
+        if not isinstance(node,dict):
+            return None
+        node = node.get(key,None)
+    return node
+
 def form_i18n_str(node:Dict)->Dict:
     # Change zh-haunt unto just zh
     zh = node['translations'].pop('zh-hant',None)
@@ -294,6 +314,47 @@ def form_i18n_str(node:Dict)->Dict:
     for lang in node['translations'].keys():
          foundlang.add(lang)
     return {"en":node['value'].strip(), **node['translations'] }
+
+def join_i18n_str(
+        istr:Dict,          # i18n string to be modified
+        astr:Dict,          # i18n string to be appended
+        sep=' '             # Separator string
+        ):
+    """
+    Concatenates the string with matching language with separator. If
+    there is no string, the
+    """
+    for lang in istr.keys():
+        if not lang in astr or not astr[lang]: continue
+        # Append astr if present
+        if istr[lang]: istr[lang] += sep
+        istr[lang] += astr[lang]
+
+    for lang in astr.keys():
+        if lang in istr: continue
+        # Copy astr if not in istr
+        istr[lang] = astr[lang]
+
+def append_i18n_str(
+        istr:Dict,      # i18n string to be modified
+        s:str           # string to be appended
+        ):
+    """
+    Appends a string to each language
+    """
+    for lang in istr.keys():
+        istr[lang] += s
+
+def fill_i18n_str(
+        istr:Dict       # i18n string to be modified
+        ):
+    """
+    Copies the en entry for all other languages as a default
+    """
+    en = istr['en']
+    for lang in lang_other:
+        if lang not in istr or not istr[lang]:
+            istr[lang] = en
 
 def str2istr(s:str)->Dict:
     return {"en":s}
@@ -483,12 +544,35 @@ def conv_bt_json(j:Dict, bt:str):
                 if not "options" in box:
                     continue
 
+                # Form a unique name.
+                meta_title = get_dict_entry(box,['meta','import','title'])
+                if _type == "measure" and meta_title:
+                    name = form_i18n_str(meta_title)
+                else:
+                    name = copy.deepcopy(titles[0])
+                    if _type == "measure":
+                        # Measure letter/number is en only
+                        fill_i18n_str(name)
+
+                    if len(titles)>1:
+                        join_i18n_str(name, titles[1])
+
+                # Fix the capitalization and clean titles
+                for lang in name.keys():
+                    if not lang in dont_uncapitalize_lang:
+                        name[lang] = nameutil.uc2_title_case(name[lang])
+                    if (config.contest_name_corrections and
+                        lang in config.contest_name_corrections):
+                        (name[lang], count) = eval_config_pattern_map(name[lang],
+                              config.contest_name_corrections[lang])
+
                 contj = contestjson[sequence] = {
                     "_id": mapped_id,
                     "_id_ext": external_id,
                     "_type": _type,
                     "header_id": lastheader,
-                    "ballot_title": titles[0]}
+                    "ballot_title": titles[0],
+                    "name": name}
 
                 if len(titles)>1:
                     contj['ballot_subtitle'] = titles[1]
@@ -528,9 +612,11 @@ def conv_bt_json(j:Dict, bt:str):
         if contest_type == "retention":
             m = eval_config_pattern(text, config.retention_pats)
             if m:
-                contest_candidate = m.group(1)
+                contest_candidate = nameutil.uc2_name_case(m.group(1))
                 if not found:
                     contj['contest_candidate'] = contest_candidate
+                    append_i18n_str(contj['name'],', '+contest_candidate)
+
             else:
                 raise FormatError(f"Mismatched retention candidate in {title}:{text}")
         else:
@@ -756,6 +842,13 @@ if config.contest_map_file:
 else:
     have_contmap = False
     contmap = {}
+
+# Retrieve short contest name from sov data
+# Disabled
+#contid2name = {}
+#if os.path.isfile("../resultdata/contlist-sov.tsv"):
+    #with TSVReader("../resultdata/contlist-sov.tsv") as r:
+       #contid2name = r.load_simple_dict(1,3)
 
 if os.path.isfile("distmap.ems.tsv"):
     with TSVReader("distmap.ems.tsv") as r:
