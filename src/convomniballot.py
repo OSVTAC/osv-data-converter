@@ -111,7 +111,15 @@ config_attrs = {
     "candidate_map_file": str,
     "approval_required": config_strlist_dict,
     "runoff": config_runoff,
-    "contest_name_corrections": config_pattern_map_dict
+    "contest_name_corrections": config_pattern_map_dict,
+    "election_voting_district": str,
+    "turnout_result_style": str
+    }
+
+config_default = {
+    "bt_digits": 3,
+    "turnout_result_style": "EMTE",
+    "election_voting_district": "0"
     }
 
 APPROVAL_REQUIRED_PAT = re.compile('^(Majority|\d/\d|\d\d%)$')
@@ -739,7 +747,7 @@ def conv_bt_json(j:Dict, bt:str):
 
 args = parse_args()
 
-config = Config(CONFIG_FILE, valid_attrs=config_attrs)
+config = Config(CONFIG_FILE, valid_attrs=config_attrs, default_config=config_default)
 
 json_dump_args = PP_JSON_DUMP_ARGS if args.pretty else DEFAULT_JSON_DUMP_ARGS
 
@@ -888,8 +896,13 @@ if os.path.isfile("candlist-fix.tsv"):
             newtsvline(candlines, sequence, cont_external_id,
                         cand_seq, cand_id, external_id,
                         title, party, designation, cand_type)
+            if external_id in candmap:
+                cand_mapped_id = candmap[external_id]
+            else:
+                cand_mapped_id = external_id
             candj = {
-                "_id": external_id,
+                "_id": cand_mapped_id,
+                "_id_ext": external_id,
                 "ballot_title": str2istr(title),
                 }
             if party:
@@ -1036,12 +1049,20 @@ outj = {
         "election_area": election_area,
         "ballot_title": ballot_title,
         "headers": [ headerjson[i] for i in sorted(headerjson) ],
-        "contests": [ contestjson[i] for i in sorted(contestjson) ]
+        "contests": [ contestjson[i] for i in sorted(contestjson) ],
+        "turnout": {
+            "_id": "TURNOUT",
+            "_type": "turnout",
+            "ballot_title": {
+                "en": "Registration and Turnout"
+            },
+            "voting_district": config.election_voting_district,
+            "result_style": config.turnout_result_style
         },
+        "no_voter_precincts": no_voter_precincts,
+    },
     "languages": sorted(foundlang),
-    "areas": arealist,
-    "no_voter_precincts": no_voter_precincts
-
+    "areas": arealist
     }
 
 # For now use a fixed path
@@ -1055,4 +1076,5 @@ outj.update(basejson)
 
 with open(f"{OUT_DIR}/election.json",'w') as outfile:
     json.dump(outj, outfile, **json_dump_args)
+    outfile.write("\n")
 

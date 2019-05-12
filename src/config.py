@@ -393,7 +393,7 @@ class Config:
         setDefault(newconfig, self.valid_attrs.keys())
 
         for k,v in newconfig.items():
-            if not replace and hasattr(self,k) and self[k]!=None: continue
+            if not replace and getattr(self,k,None)!=None: continue
             if self.valid_attrs:
                 if k not in self.valid_attrs: continue
                 (v, isErr) = validate_attr(v, self.valid_attrs[k], k)

@@ -96,7 +96,7 @@ separator = "|" if args.pipe else "\t"
 
 config = Config(f"config-matchcand{args.suffix}.yaml", valid_attrs=config_attrs)
 
-m = CandContMatch(debug=args.debug)
+m = CandContMatch(debug=args.debug, question_pattern='write-?in')
 
 distmap = {}
 candseq = {}

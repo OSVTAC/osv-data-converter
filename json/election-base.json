@@ -50,15 +50,6 @@
             "heading": "Exhausted Ballots"
         }
     ],
-    "turnout": {
-        "_id": "TURNOUT",
-        "_type": "turnout",
-        "ballot_title": {
-            "en": "Registration and Turnout"
-        },
-        "voting_district": "0",
-        "result_style": "EMTE"
-    },
     "result_styles": [
         {
             "_id": "EMS",
