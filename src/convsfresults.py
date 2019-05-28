@@ -379,9 +379,9 @@ def loadRCVData(rzip,                   # zipfile context
 
         if args.zero:
             rcvrounds = 1
-            cols = ['RCV1']+statprefix+['0']*len(rcvtable)
+            final_cols = cols = ['RCV1']+statprefix+['0']*len(rcvtable)
             newtsvline(rcvlines, *cols)
-            return rcvlines
+            return rcvlines, final_cols
 
         # Check duplicate
         if rcvrounds>1:
