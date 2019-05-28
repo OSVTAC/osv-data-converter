@@ -470,7 +470,7 @@ def conv_bt_json(j:Dict, bt:str):
             lastrcvtitle = titles
             lastrcvtext = paragraphs
             continue
-        elif re.search(r'-\d$',external_id):
+        elif re.match(r'\d+-\d$',external_id):
             # 2nd, 3rd RCV choices
             continue
         else:
