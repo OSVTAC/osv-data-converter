@@ -507,7 +507,7 @@ def conv_bt_json(j:Dict, bt:str):
 
     election_title = form_i18n_str(j['election']['title'])
     # In 2019 the admin_title has the date, before the date was a prefix on election_title
-    election_admin_title = j['election'].get('admin_title',None)
+    election_admin_title = j['election'].get('admin_title',"")
     m = re.match(r'(\d{4}-\d\d-\d\d) ',election_admin_title)
     if m:
         # 2019 format where the date prefix is in admin_title only
@@ -1122,17 +1122,18 @@ if os.path.isfile("reporting_groups.tsv"):
 else:
     reporting_groups_by_distid = {}
 
-with TSVReader("../ems/distnames.tsv") as r:
-    if r.headerline != "District_Code|District_Name|District_Short_Name":
+with TSVReader("../ems/distclass.tsv") as r:
+    if r.headerline != "District_Code|Classification|District_Name|District_Short_Name":
         raiseFormatError(f"Unmatched distnames.tsv header {r.headerline}")
     for cols in r.readlines():
-        (District_Code, District_Name, District_Short_Name) = cols
+        (District_Code, Classification, District_Name, District_Short_Name) = cols
 
         # TODO: Compute classification
         arealist.append({
             "_id": District_Code,
             "name": District_Name,
             "short_name": District_Short_Name,
+            "classification": Classification,
             "reporting_group_ids": reporting_groups_by_distid.get(District_Code,"")
         })
 
