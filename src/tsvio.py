@@ -285,14 +285,16 @@ class TSVWriter:
                  sep:str='\t',          # delimiter separating fields
                  header:str=None,       # | separated header
                  unique_col_check:int=None,   # column to insure unique value
+                 strip_trailing_sep:bool=True,   # strip blank trailing columns
+                 map_data=None,         # str.maketrans() map
                  encoding:str=UTF8_ENCODING):
         """
-        Creates a tsv reader object. The opened file is passed in as f
-        (so a with/as statement can provide a file open context).
-        If read_header is true, the first line is assumed to be a
-        header. If the sep column separating character is not supplied,
-        the characters '\t|,' will be searched in the header line (if
-        read) to automatically set the separator, otherwise tab is assumed.
+        Creates a tsv writer object. Lines can be written directly to the
+        file, or if the sort option is True, lines are first collected in
+        a list, then sorted. The file is then written when the context is
+        exited. If the unique_col_check is provided, it is the index of
+        the column that contains an ID that must be unique. If not it will
+        raise the DuplicateError exception.
 
         Args:
           path: the path to open, as a path-like object.
@@ -305,6 +307,8 @@ class TSVWriter:
         self.unique_col_check = unique_col_check
         self.lines = []
         self.linedict = OrderedDict()
+        self.strip_trailing_sep = strip_trailing_sep
+        self.map_data = map_data
 
 
     def __enter__(self):
@@ -335,7 +339,12 @@ class TSVWriter:
         """
         Join a list of columns with \t and append \n
         """
-        return(self.sep.join(map(str,args))+'\n')
+        args = [s.translate(self.map_data) if self.map_data else s
+                for s in map(str,args)]
+        line = self.sep.join(args)
+        if self.strip_trailing_sep:
+            line = line.rstrip(self.sep)
+        return(line+'\n')
 
     def addline(self,
                 *args       # Argument list is converted to strings

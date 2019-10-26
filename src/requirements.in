@@ -10,3 +10,5 @@
 nameparser
 # Convert upper case into NYT Manual of Style capitalization
 titlecase
+# Read XLS
+xlrd
