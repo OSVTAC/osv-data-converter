@@ -220,6 +220,38 @@ Notes on the omniballot json (per ballot type or composite):
             "translations": {
                 "es": "2018-06-05 Elecciones Estatales Primarias Directas Consolidadas",
 
+Updates for 2019-11-05:
+    "election": {
+        "account_id": "06075",
+        "admin_title": "2019-11-05 Municipal Election",
+        "close_date": 1572940800000,
+        "created_at": "2019-08-22T15:43:20Z",
+        "external_id": "35bd89db-04a7-4a1f-80af-78a4189db7d4",
+        "id": 1485,
+        "lang": "",
+        "ocd_id": "",
+        "open_date": 1568962800000,
+        "parent_id": 0,
+        "party_handling": 0,
+        "party_ids": null,
+        "status": "",
+        "title": {
+            "format": "text",
+            "style": "default",
+            "translations": {
+                "es": "Elecciones Municipales Consolidadas",
+                "tl": "Pinagsamang Pangmunisipal na Eleksyon",
+                "zh-hant": "聯合市政選舉"
+            },
+            "value": "Consolidated Municipal Election"
+        },
+        "type": "",
+        "updated_at": "2019-09-18T18:42:00Z",
+        "uses_pct_pdfs": false,
+        "uses_rotation": true,
+        "ver": 35
+
+
     "precincts": [
             "external_id": "8398",  # Unknown ID
             "id": 79649,            # Internal ID
@@ -275,6 +307,58 @@ Notes on the omniballot json (per ballot type or composite):
                     "value": "GOVERNOR"
                     "style": "subtitle",
                     "value": "Vote for One"
+For 2018-11:
+        {
+            "external_id": "667-rcheader",
+            "num_selections": 0,
+            "searchable": "ASSESSOR-RECORDER",
+            "text": [
+                    "value": "<p>You may rank up to three choices. To rank fewer than three candidates, leave any remaining choices blank.</p>"
+            "titles": [
+                    "value": "ASSESSOR-RECORDER"
+            "type": "header",
+            "ver": 1
+        },
+        {
+            "external_id": "667",
+            "num_selections": 1,
+            "titles": [
+                    "value": "1. FIRST CHOICE"
+            "searchable": "1. FIRST CHOICE,Vote for One",
+            "type": "contest",
+For 2019-11:
+        {
+            "admin_title": "Mayor - Title",
+            "content_hash": "83782638a8305edecadd22dd544f0e608e327db5",
+            "created_at": "0001-01-01T00:00:00Z",
+            "district_ids": null,
+            "election_id": 1485,
+            "external_id": "2a614549-e8df-4827-8a29-7c5f4d098d8e",
+            "num_selections": 1,
+            "searchable": "MAYOR,Rank up to 6 candidates",
+            "sequence": 1,
+            "text": [],
+            "text_after": [],
+            "titles": [
+                   "value": "MAYOR"
+                    "value": "Rank up to 6 candidates"
+
+            "type": "header",
+            "ver": 7
+        },
+        {
+            "account_id": "06075",
+            "admin_title": "MAYOR - 1",
+            "election_id": 1485,
+            "external_id": "334",
+            "num_selections": 1,
+            "searchable": "1st Choice",
+            "sequence": 10,
+            "titles": [
+                    "value": "1st Choice"
+            "type": "contest",
+            "ver": 5
+
             "options": [
                     "external_id": "4862",
                     "id": 27721,
@@ -422,13 +506,21 @@ def conv_bt_json(j:Dict, bt:str):
     lastheader = ""
 
     election_title = form_i18n_str(j['election']['title'])
-    date_prefix = election_title['en'][:11]
-    # Trim election date prefix
-    for lang in election_title.keys():
-        if not election_title[lang].startswith(date_prefix):
-            raise FormatError(f"Inconsistent election date prefix {election_titles[0][lang]}")
-        election_title[lang] = election_title[lang][11:]
-    date_prefix = date_prefix[:-1]
+    # In 2019 the admin_title has the date, before the date was a prefix on election_title
+    election_admin_title = j['election'].get('admin_title',None)
+    m = re.match(r'(\d{4}-\d\d-\d\d) ',election_admin_title)
+    if m:
+        # 2019 format where the date prefix is in admin_title only
+        date_prefix = m.group(1)
+    else:
+        date_prefix = election_title['en'][:11]
+        # Trim election date prefix
+        for lang in election_title.keys():
+            if not election_title[lang].startswith(date_prefix):
+                raise FormatError(f"Inconsistent election date prefix {election_title[0][lang]}")
+            election_title[lang] = election_title[lang][11:]
+        date_prefix = date_prefix[:-1]
+
     if election_date:
         if date_prefix != election_date:
             FormatError(f"Inconsistent election date")
@@ -465,12 +557,15 @@ def conv_bt_json(j:Dict, bt:str):
             isrcv = True
         elif (external_id.endswith('-rcheader') or
               (len(paragraphs)==1 and
-               paragraphs[0].get('en',"").startswith('You may rank up to'))):
+               paragraphs[0].get('en',"").startswith('You may rank up to')) or
+              (len(titles)==2 and
+               titles[1].get('en',"").startswith('Rank up to'))):
             # Save the title and heading for contest that follows
             lastrcvtitle = titles
             lastrcvtext = paragraphs
             continue
-        elif re.match(r'\d+-\d$',external_id):
+        elif (re.match(r'\d+-\d$',external_id) or
+              re.match(r'\d+(st|nd|rd|th) Choice',titles[0].get('en',""))):
             # 2nd, 3rd RCV choices
             continue
         else:
@@ -495,12 +590,17 @@ def conv_bt_json(j:Dict, bt:str):
         if title=='':
             print(f"Strange title: {contest_id}|{sequence}|{paragraphs}")
 
-        if isrcv and vote_for == "" and len(paragraphs)==1:
-            vote_for_istr = paragraphs[0]
-            paragraphs = []
-            m = re.search(r'up to (\w+) choices', vote_for_istr['en'])
+        if isrcv and vote_for == "":
+            if len(paragraphs)==1:
+                vote_for_istr = paragraphs[0]
+                paragraphs = []
+            elif len(titles)==2:
+                vote_for_istr = titles[1]
+                del titles[1]
+
+            m = re.search(r'up to (\w+) (?:choices|candidates)', vote_for_istr['en'])
             if m:
-                vote_for = word2num[m.group(1).lower()]
+                vote_for = m.group(1) if m.group(1).isnumeric() else word2num[m.group(1).lower()]
             else:
                 print(f"Failed to match number in {vote_for_istr['en']}")
                 vote_for = ""
@@ -790,7 +890,8 @@ if config.approval_required:
 
 '''
 Notes on the format of lookups.json
-styles[id].code = ballot type
+styles[id].code = ballot type (internal/wrong)
+           .name = "Poll BT 9", (correct in name - prior year matched code)
           .json_uri = URL to ballot definition data
           .precinct_ids[] omniballot precinct id list.
    .
@@ -928,11 +1029,16 @@ except:
 os.makedirs("bt", exist_ok=True)
 
 for sid, s in lookups['styles'].items():
-    bt = s["code"].zfill(config.bt_digits)
+    m = re.match(r'^(?:Poll BT )?(\d+)$', s["name"])
+    if m:
+        bt = m.group(1)
+    else:
+        bt = s["code"]
     if bt == 'composite':
         continue
+    bt = bt.zfill(config.bt_digits)
 
-    print(f'Reading Style {sid} for bt {s["code"]}')
+    print(f'Reading Style {sid} for bt {s["code"]}/{s["name"]}')
     with open(f"bt/bt{bt}.json") as f:
         j = json.load(f)
         conv_bt_json(j, bt)
@@ -1072,7 +1178,8 @@ with open(path) as f:
 
 outj.update(basejson)
 
-
+if not os.path.exists(OUT_DIR):
+    os.makedirs(OUT_DIR)
 
 with open(f"{OUT_DIR}/election.json",'w') as outfile:
     json.dump(outj, outfile, **json_dump_args)
