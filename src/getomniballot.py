@@ -139,9 +139,15 @@ if args.test: exit()
 os.makedirs("bt", exist_ok=True)
 
 for sid, s in j['styles'].items():
-    print(f'Fetching Style {sid} for bt {s["code"]}')
+    print(f'Fetching Style {sid} for bt {s["code"]}/{s["name"]}')
+    m = re.match(r'^(?:Poll BT )?(\d+)$', s["name"])
+    if m:
+        bt = m.group(1)
+    else:
+        bt = s["code"]
+    bt = bt.zfill(3)
     # See sample above, the styles.[].json_uri has the URL to fetch.
-    j = getjsonfile(s['json_uri'], f'bt/bt{s["code"].zfill(3)}.json')
+    j = getjsonfile(s['json_uri'], f'bt/bt{bt}.json')
     #
     #put_json_file(j['boxes'], f'bt/btb{s["code"].zfill(3)}.json')
     #j = getjsonfile(GETBT_PREFIX+s['json_uri'],
