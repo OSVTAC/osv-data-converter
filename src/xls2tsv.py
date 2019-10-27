@@ -17,6 +17,7 @@ import os.path
 import re
 import argparse
 import xlrd
+import datetime
 from typing import Dict, Tuple, List, TextIO, Union, Pattern
 from tsvio import TSVReader, TSVWriter, DuplicateError, map_psv_data, map_tsv_data
 
@@ -70,6 +71,22 @@ else:
     suffix = ".tsv"
     map_data = map_tsv_data
 
+def format_value(cell):
+    """
+    Returns the string value representing an xlrd cell.
+    """
+    if cell.value==None:
+        return ''
+    if cell.ctype==xlrd.XL_CELL_DATE:
+        dt = datetime.datetime(*xlrd.xldate_as_tuple(cell.value, wb.datemode))
+        # We could check seconds to format as a date
+        if dt.time()==datetime.time.min:
+            return dt.date().isoformat()
+        else:
+            return dt.isoformat(sep=' ')
+    return str(cell.value)
+
+
 
 for f in args.infile:
     outf = re.sub(r'\.xlsx?$', '', f, flags=re.I) + suffix
@@ -91,7 +108,7 @@ for f in args.infile:
                     w.f.write(ws_separator)
 
                 for row in ws.get_rows():
-                    w.addline(*('' if v.value==None else v.value for v in row))
+                    w.addline(*(format_value(v) for v in row))
                 ws_separator = '\f'
 
 
