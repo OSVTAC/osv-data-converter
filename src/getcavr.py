@@ -3,38 +3,29 @@
 #
 
 """
-Program to fetch results download datasets for SF
+Program to fetch voter registration statistic download files from the
+California Sec
 
-TODO:
-    * store data in resultsdata/resultdata-raw.zip
-    * compute/verify sha512sum.txt
-    * add digital signature in sha512sum.txt.sig
 """
 
 import os
 import os.path
+import sys
 import re
 import urllib.request
 import argparse
 from shutil import copyfileobj
 
 DESCRIPTION = """\
-Fetch election results data from sfgov.org Election Results - Detailed Reports.
+Fetch voter registration data from sos.ca.gov.
 
 The first found (most recent) results URLs are retrieved from the index
-page and saved in the subdirectory "resultdata-raw".
+page and saved in the subdirectory "turnoutdata-raw".
 """
 
 VERSION='0.0.1'     # Program version
 
-DEFAULT_URL = "https://sfelections.sfgov.org/november-5-2019-election-results-detailed-reports"
-
-# VBM Turnout is on the Data Downloads page
-# https://www.sfelections.org/tools/election_data/data/2018-11-06/ED_VBM_PCT.csv
-# TODO: Add the ED_VBM
-# VBM history (totals by day
-# https://www.sfelections.org/tools/election_data/output.php?data=1&E=2018-11-06
-# Stored in vbm_turnout_day.tsv
+REG_INDEX_URL = 'https://www.sos.ca.gov/elections/report-registration/'
 
 
 def parse_args():
@@ -55,10 +46,6 @@ def parse_args():
                         help='save error response html with .err suffix')
     parser.add_argument('-p', dest='pipe', action='store_true',
                         help='use pipe separator else tab')
-    parser.add_argument('-X', dest='noxml', action='store_true',
-                        help='exclude xml format')
-    parser.add_argument('url', help='URL of the detailed reports index page',
-                        nargs='?', default=DEFAULT_URL)
 
     args = parser.parse_args()
 
@@ -82,11 +69,16 @@ def getfile(url, filename):
                 # Might need to check for Content-Encoding
                 #reqinfo = infile.info()
                 #print(reqinfo)
+                content = infile.read()
+                if content.startswith(b'\xff\xfeD'):
+                    print(f"Found UTF-16 in {filename}")
+                    content = content.decode('UTF-16').encode('UTF-8')
                 with open(filename,'wb') as outfile:
-                    copyfileobj(infile,outfile)
+                    outfile.write(content)
 
                 if filename.endswith(".xlsx"):
                     os.system(f"xls2tsv.py {xls2tsv_opts} '{filename}'")
+
 
         except urllib.error.URLError as e:
             print(e)
@@ -98,54 +90,15 @@ args = parse_args()
 
 xls2tsv_opts = " -p" if args.pipe else ""
 
-os.makedirs("resultdata-raw", exist_ok=True)
-
-urlfile = open("resultdata-raw/urls.tsv",'w');
-
-foundRelease = None # First release # found is the one to download
-
-rcv_prefixes = set()
-
-content = urllib.request.urlopen(args.url)
+content = urllib.request.urlopen(REG_INDEX_URL)
 for lineb in content:
     line = lineb.decode('utf-8')
-    m =re.search(r'href="([^"<>]*/20\d{6}/data/(20\d{6})/(?:([^/"]+)/)?(?:20\d{6}_)?([^/"]+))"',  line)
-    if not m:
-        continue
+    # Content is on one long line
+    m =re.search(r'.*href="/elections/report-registration/([^"<>]+)/"',  line)
+    if m:
+        subdir = m.group(1)
+        if args.verbose:
+            print(f"Subdir:{subdir}")
 
-    url, release, subdir, filename = m.groups()
-    if foundRelease is None:
-        foundRelease = release
-    elif release != foundRelease:
-        continue;
-    if args.verbose:
-        print(f"url:{url}")
-
-    if filename.endswith(".xls"):
-        # Bug
-        filename += "x"
-        url += "x"
-
-    if args.noxml and filename.endswith(".xml"):
-        # Skip the verbose xml
-        continue;
-
-
-    urlfile.write(f'{url}\t{filename}\n')
-
-    if re.match(r'^CVR_Export_\w+\.zip',filename):
-        getfile(url,"CVR_Export.zip")
-    else:
-        getfile(url,"resultdata-raw/"+filename)
-    # break; # for debug
-    if subdir is not None:
-        rcv_prefixes.add(subdir)
-
-prefixpat = "|".join(rcv_prefixes)
-print(f'RCV_prefixes={prefixpat}')
-
-prefout = open('resultdata-raw/rcv_prefixes.txt','w');
-prefout.write(prefixpat);
-
-
-
+for filename in ['county.xlsx']:
+    getfile(f"https://elections.cdn.sos.ca.gov/ror/{subdir}/county.xlsx", filename)

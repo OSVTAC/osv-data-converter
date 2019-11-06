@@ -63,6 +63,8 @@ VERSION='0.0.1'     # Program version
 SF_ENCODING = 'ISO-8859-1'
 SF_HTML_ENCODING = 'UTF-8'
 
+TURNOUT_LINE_SUFFIX = "Election␤Statement of the Vote"
+
 OUT_DIR = "../out-orr"
 
 # Skip title capitalizing upper case for these languages
@@ -113,13 +115,15 @@ config_attrs = {
     "runoff": config_runoff,
     "contest_name_corrections": config_pattern_map_dict,
     "election_voting_district": str,
+    "election_base_suffix": str,
     "turnout_result_style": str
     }
 
 config_default = {
     "bt_digits": 3,
     "turnout_result_style": "EMTE",
-    "election_voting_district": "0"
+    "election_voting_district": "0",
+    "election_base_suffix": ""
     }
 
 APPROVAL_REQUIRED_PAT = re.compile('^(Majority|\d/\d|\d\d%)$')
@@ -1173,7 +1177,7 @@ outj = {
     }
 
 # For now use a fixed path
-path = os.path.dirname(__file__)+"/../json/election-base.json"
+path = os.path.dirname(__file__)+f"/../json/election-base{config.election_base_suffix}.json"
 with open(path) as f:
     basejson = json.load(f)
 
