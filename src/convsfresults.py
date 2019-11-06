@@ -72,6 +72,9 @@ OUT_DIR = "../out-orr/resultdata"
 
 SOV_FILE = "psov"
 
+have_EDMV = False
+
+
 DEFAULT_JSON_DUMP_ARGS = dict(sort_keys=True, separators=(',\n',':'), ensure_ascii=False)
 PP_JSON_DUMP_ARGS = dict(sort_keys=True, indent=4, ensure_ascii=False)
 
@@ -81,10 +84,10 @@ approval_percent_pat = re2(r'^(\d+)%$')
 # Result Stats by type
 resultlistbytype = {}
 for line in """\
-CW=RSReg RSCst RSRej RSOvr RSUnd RSTot RSWri
-RW=RSReg RSCst RSRej RSOvr RSUnd RSExh RSTot RSWri
-T=RSReg RSCst RSRej
-C=RSReg RSCst RSRej RSOvr RSUnd RSTot""".split('\n'):
+EMCW=RSReg RSCst RSRej RSOvr RSUnd RSTot RSWri
+EMRW=RSReg RSCst RSRej RSOvr RSUnd RSExh RSTot RSWri
+EMT=RSReg RSCst RSRej
+EMC=RSReg RSCst RSRej RSOvr RSUnd RSTot""".split('\n'):
     name, resnames = line.split('=')
     resultlistbytype[name] = resnames.split(' ')
 
@@ -319,7 +322,7 @@ def loadEligible()->str:
         with TSVReader("../vr/county.tsv") as reader:
             for l in reader.readlines():
                 if l[0] == "San Francisco":
-                    return l[1]
+                    return int(float(l[1]))
     except Exception as ex:
         pass
     return ""
@@ -681,7 +684,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         cols[5] != 'Voters Cast' or
                         cols[6] != '% Turnout'):
                         raise FormatError(f"sov turnout column header mismatch {linenum}:{line}")
-                    rs_group = 'T'
+                    rs_group = 'EMT'
                     hasrcv = haswritein = 0
                 else:
                     total_col = ncols - 1
@@ -733,16 +736,16 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     # Check for an RCV contest
                     hasrcv = contest_id in isrcv
                     if hasrcv:
-                        rs_group = "R"
+                        rs_group = "EMR"
                     else:
-                        rs_group = "C"
+                        rs_group = "EMC"
 
                     #Compute result stat group
                     if haswritein:
                         rs_group += "W"
 
                     if args.verbose:
-                        print(f"Contest({contest_id}:{rs_group} v={vote_for} {contest_name}")
+                        print(f"Contest({contest_id}:{rs_group} v={vote_for} {contest_name})")
 
                 resultlist = resultlistbytype[rs_group]
                 headers = ['area_id','subtotal_type'
@@ -859,6 +862,72 @@ with ZipFile("resultdata-raw.zip") as rzip:
                 if in_turnout:
                     newtsvline(pctturnout, area_id, RSReg,
                             RSCst)
+                    if area_id == "ALLPCTS" and subtotal_type == 'TO':
+                        # Enter turnout
+                        if have_EDMV:
+                            contest_status_json.append({
+                            "_id": "TURNOUT",
+                            "no_voter_precincts": [],
+                            "precincts_reporting": int(processed_done),
+                            "total_precincts": int(total_precincts),
+                            "reporting_time": report_time_str,
+                            "result_stats": [
+                                {
+                                    "_id": "RSEli",
+                                    "heading": "Eligible Voters",
+                                    "results": [ eligible_voters, eligible_voters, eligible_voters]
+                                },
+                                {
+                                    "_id": "RSReg",
+                                    "heading": "Registered Voters",
+                                    "results": [total_registration, total_registration, total_registration]
+                                },
+                                {
+                                    "_id": "RSCst",
+                                    "heading": "Ballots Cast",
+                                    "results": [
+                                        str(total_precinct_ballots+total_mail_ballots),
+                                        str(total_precinct_ballots), str(total_mail_ballots)]
+                                },
+                                {
+                                    "_id": "RSRej",
+                                    "heading": "Ballots Challenged",
+                                    "results": ["0","0","0"]
+                                }
+                            ]
+                            })
+                        else:
+                            contest_status_json.append({
+                            "_id": "TURNOUT",
+                            "no_voter_precincts": [],
+                            "precincts_reporting": int(processed_done),
+                            "total_precincts": int(total_precincts),
+                            "reporting_time": report_time_str,
+                            "result_stats": [
+                                {
+                                    "_id": "RSEli",
+                                    "heading": "Eligible Voters",
+                                    "results": [ eligible_voters]
+                                },
+                                {
+                                    "_id": "RSReg",
+                                    "heading": "Registered Voters",
+                                    "results": [str(RSRej)]
+                                },
+                                {
+                                    "_id": "RSCst",
+                                    "heading": "Ballots Cast",
+                                    "results": [str(RSCst)]
+                                },
+                                {
+                                    "_id": "RSRej",
+                                    "heading": "Ballots Challenged",
+                                    "results": [str(RSRej)]
+                                }
+                            ]
+                        })
+
+
                     continue
                 else:
                     if hasrcv:
@@ -894,8 +963,8 @@ with ZipFile("resultdata-raw.zip") as rzip:
                                 rzip, contest_name, candnames, stats[1:5])
                             if final_cols:
                                 candvotes = final_cols[cand_start_col:]
-                            else:
-                               hasrcv = False
+                            #else:
+                               #hasrcv = False
                         else:
                             contest_rcvlines = []
                         rcv_rounds = len(contest_rcvlines)
