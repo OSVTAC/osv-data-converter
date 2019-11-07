@@ -72,8 +72,10 @@ OUT_DIR = "../out-orr/resultdata"
 
 SOV_FILE = "psov"
 
-have_EDMV = False
+have_EDMV = True
+check_duplicate_turnout = False
 
+grand_totals_wrong = True # Bug in SOV: Cumulative not computed
 
 DEFAULT_JSON_DUMP_ARGS = dict(sort_keys=True, separators=(',\n',':'), ensure_ascii=False)
 PP_JSON_DUMP_ARGS = dict(sort_keys=True, indent=4, ensure_ascii=False)
@@ -112,6 +114,11 @@ VOTING_STATS = OrderedDict([
     ])
 # These district subtotals are meaningless
 countywide_districts = {'0','SEN11'}
+
+vgnamemap = {'Total':'TO',
+             'Election Day':'ED',
+             'Vote by Mail':'MV',
+             'VBM':'MV'}
 
 rsnamemap = {'Registration':'RSReg',
              'Ballots Cast':'RSCst',
@@ -293,11 +300,17 @@ re2c = re2('')
 #    x     x     x      0    1      2     3     4
 rcvLabelMap = {
     'WRITE-IN':4,
+    'Write-in':4,
     'Exhausted by Over Votes':0,
+    'Overvotes':0,
     'Under Votes':1,
+    'Blanks':1,
+    'Exhausted':2,
     'Exhausted Ballots':2,
+    'Continuing Ballots Total':3,
     'Continuing Ballots':3,
     'TOTAL':-1,
+    'Non Transferable Total':-1,
     'REMARKS':-1,
     '':-1
     }
@@ -306,12 +319,27 @@ def checkDuplicate(d:Dict[str,str],  # Dict to set/check
                    key:str,          # Key
                    val:str,          # Value
                    msg:str):         # Message on duplicate
+    if not check_duplicate_turnout:
+        return
     global linenum
     if key not in d or d[key]=="0":
         d[key] = val
     elif d[key] != val:
         print(f"Duplicate {msg} for {key}->{val}!={d[key]} at {linenum}")
         raise
+
+def addGrandTotal(grand_total,      # computed total lines
+                  cols):            # Next subtotal line
+    subtotal_type = cols[1]
+    if subtotal_type not in grand_total:
+        grand_total[subtotal_type] = ['ALLPCTS']+cols[1:]
+    else:
+        t = grand_total[subtotal_type]
+        if len(t)!=len(cols):
+            print(f"grand_total mismatch {t} != {cols}")
+        for i in range(2,len(cols)):
+            t[i] = int(cols[i])+int(t[i])
+
 
 def loadEligible()->str:
     """
@@ -335,11 +363,13 @@ def loadRCVData(rzip,                   # zipfile context
     """
     Load the html file with RCV rounds and prepare the result data lines.
     """
-    filename = string.capwords(contest_name.lower())
+    filename = contest_name.lower()
+    # The | is used for readability
+    sep = "|"
     # Pattern match the file names
-    if (re2c.sub2ft(filename, r'.*Supervisor\D+(\d+)$', 'RcvShortReport_D{0}.psv') or
-        re2c.sub2ft(filename, r'^.*(District Attorney).*$', 'RcvShortReport_DA.psv') or
-        re2c.sub2ft(filename, r'^.*(Mayor|Assessor|Defender|Attorney|Sheriff|Treasurer).*$', 'RcvShortReport_{0}.psv')):
+    if (re2c.sub2ft(filename, r'.*supervisor\D+(\d+)$', 'd{0}_short.psv') or
+        re2c.sub2ft(filename, r'^.*(district attorney).*$', 'da_short.psv') or
+        re2c.sub2ft(filename, r'^.*(mayor|assessor|defender|attorney|sheriff|treasurer).*$', '{0}_short.psv')):
         filename = re2c.string
     else:
         raise FormatError(f"Unmatched RCV contest name {filename}")
@@ -350,23 +380,27 @@ def loadRCVData(rzip,                   # zipfile context
     if filename not in zipfilenames:
         print(f"RCV file {filename} not found")
         return rcvlines, []
+    global linenum
+    linenumsave = linenum
+    linenum = 0
+    inHead = 1
     with rzip.open(filename) as f:
-        html = f.read().decode(SF_HTML_ENCODING)
-        m = re.search(r'<table[^<>]*>\s*(.*)</table',html,re.S)
-        if not m:
-            raise FormatError(f"Unmatched RCV html in {filename}")
-
         i = 0
-        for row in m[1].split('</tr>'):
-            if re.search('<th',row):
-                # Skip the header
-                continue
-            row = re.sub(r'(\s+|&nbsp;)+',' ',row) # Replace newline with space
-            row = re.sub(r'</td>\s*$','',row)    #trim end of last td
-            cols = [re.sub(r'.*<td[^<>]*>\s*','',cell, re.S)
-                    for cell in row.split('</td>')]
-            #print("RCVline:"+'|'.join(cols))
+        for line in f:
+            line = decodeline(line, SF_SOV_ENCODING)
+            cols = line.split(sep)
+            ncols = len(cols)
 
+            # Skip to Candidate heading
+            if inHead:
+                if ncols>4 and cols[2]=='Votes':
+                    # Record Votes columns
+                    votecols = [i for i in range(ncols) if cols[i]=='Votes']
+                    #print(f"voltecols={votecols}")
+                    inHead = False
+                continue
+
+            # Filter list to
             candname = cols[0]
 
             if candname=='REMARKS': break
@@ -374,16 +408,19 @@ def loadRCVData(rzip,                   # zipfile context
             if candname in rcvLabelMap:
                 j = rcvLabelMap[candname]
                 if j < 0: continue
+            elif i>=len(candnames):
+                continue
             else:
-                (party_name, writein, candname) = candnametrim(cols[0])
+                #(party_name, writein, candname) = candnametrim(cols[0])
                 if candnames[i] != candname:
                     raise FormatError(
-                     f"Unmatched RCV candidate {candname} in {filename}")
+                     f"Unmatched RCV candidate {candname}!={candnames[i]} in {filename}")
                 j = i + 5
                 i+=1
-            rcvtable[j] = cols[1::3]
+            rcvtable[j] = [int(float(cols[i])) for i in votecols]
             #print(f"{candname}:{rcvtable[j]}")
-        # End loop over html table rows
+        # End loop over xls table rows
+        #print(f"rcvtable={rcvtable}")
 
         # Transpose the data to decreasing RCV rounds
         rcvrounds = len(rcvtable[3])
@@ -395,16 +432,22 @@ def loadRCVData(rzip,                   # zipfile context
             return rcvlines, final_cols
 
         # Check duplicate
+        for j in range(len(rcvtable)):
+            if not rcvtable[j]:
+                rcvtable[j] = [0] * rcvrounds
+
         if rcvrounds>1:
             dup = 1
             for j in range(len(rcvtable)):
                 if rcvtable[j][0] != rcvtable[j][1]:
                     dup = 0
                     break
-            if dup==0:
-                print(f"Not duplicated: {contest_name}\n")
+            if dup:
+                print(f"Duplicated: {contest_name}\n")
         else:
             dup = 0
+
+        #print(f"rcvtable={rcvtable}")
 
         for i in range(rcvrounds,dup,-1):
             area_id = f'RCV{i-dup}'
@@ -417,6 +460,7 @@ def loadRCVData(rzip,                   # zipfile context
             newtsvline(rcvlines, *cols)
         # End loop over rcv rounds
     # End processing html file
+    linenum = linenumsave
     return rcvlines, final_cols
 
 total_registration = 0
@@ -475,9 +519,11 @@ def load_json_table(
     altkeyattr:str=None, # Secondary dict index attriute
     )->Dict[str,object]: # Returns indexed object
     """
-    Extract and load the json data to a parsed object
+    Extract and load the json data to a parsed object. Create a tsv
     """
     with rzip.open(filename) as f:
+        tsvlines = []
+        tsvfilename = filename[:-5]+'.tsv'
         objtype = namedtuple(filename[:-5],attrs.keys())
         j = json.load(f)
         js_version = j['Version'];
@@ -491,9 +537,11 @@ def load_json_table(
                     v = 0 if t==int else ""
                 i[a] = t(v)
             r = objtype(**i)
+            newtsvline(tsvlines,*r)
             d[i[keyattr]]=r
             if altdict!=None:
                 altdict[i[altkeyattr]]=r
+        putfile(filename[:-5]+'.tsv','|'.join(attrs.keys()),tsvlines)
     return d
 
 
@@ -515,6 +563,8 @@ CandidateManifest_attrs= {
     "ContestId":str,
     "Type":str,
     }
+
+CandidateManifest = namedtuple("CandidateManifest",CandidateManifest_attrs.keys())
 
 with ZipFile("CVR_Export.zip") as rzip:
     ContestManifest_by_Id = {}
@@ -571,11 +621,19 @@ with ZipFile("resultdata-raw.zip") as rzip:
         subtotal_col = -1
         pctname2areaid = {} # Map original precinct ID to area ID
 
+        have_EDMV = True # sov has only total, no ED MV subtotals
+        missing_grand_total = True
+
         # Patterns for line type
         page_header_pat = re2(r'\f?Page: (\d+) of \d+[\|\t]+(20\d\d-\d\d-\d\d[ :\d]+)$')
-        contest_header_pat=re2(r'(.*) \(Vote for +(\d+)\)$')
+        contest_header_pat=re2(r'^(.*)(?: \(Vote for +(\d+)\))?$')
         precinct_name_pat = re2(r'PCT (\d+)(?:/(\d+))?( MB)?$')
-        skip_area_pat = re2(r'^(Cumulative|San Francisco - Total|City and County - Total)$')
+        subtotal_name_pat = re2(r'^(Election Day|Vote by Mail|Total)$')
+        # If grand_totals_wrong compute Cumulative
+        skip_area_pat = (re2(r'^(Cumulative|Cumulative - Total|City and County - Total)$')
+                         if grand_totals_wrong else
+                         re2(r'^(San Francisco - Total|Cumulative - Total|City and County - Total)$'))
+        writeincand_suffix = "␤Qualified Write In"
         TURNOUT_LINE_SUFFIX = '% Turnout'
 
         # Collected precinct consolidation
@@ -586,18 +644,20 @@ with ZipFile("resultdata-raw.zip") as rzip:
         cont_id_eds2sov = {}# Map an eds ID to sov ID
         pctturnout = []
         precinct_count = {}
+        pctturnout_reg = {} # Map original precinct ID to registration
+        pctturnout_ed = {}  # Map original precinct ID to ED ballots
+        pctturnout_mv = {}  # Map original precinct ID to MV ballots
 
         # Note:Not in current files
         district_id_pat = re2(r'^(\w+):(.+)')
 
         # Used to make ID/sequence
         contest_order = 0
-        skip_lines = 0;
+        skip_lines = 0
 
         for line in f:
-            linenum += 1
             line = decodeline(line, SF_SOV_ENCODING)
-            if line == "" or line.endswith("Statement of the Vote"):
+            if line == "" or re.search(r'Statement of the Vote( \d+)?$',line):
                 # Ignore blank lines
                 continue
 
@@ -623,6 +683,8 @@ with ZipFile("resultdata-raw.zip") as rzip:
                 elif contest_header_pat.match(line):
                     contest_name, vote_for = contest_header_pat.groups()
                     contest_order += 1
+                    if not vote_for:
+                        vote_for = 1
                     vote_for = int(vote_for)
                     if contest_name not in ContestManifest:
                         print(f"Unmatched contest {contest_name}")
@@ -634,12 +696,14 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         contest = ContestManifest[contest_name]
                         contest_id = contest.Id
                         contest_id_ext = contest.ExternalId
+                        vote_for = contest.VoteFor
                         candbyname = CandidateManifest_by_ContestId.get(contest_id,{})
                         max_ranked = contest.NumOfRanks
                         if contest.VoteFor != vote_for:
                             print(f"Mismatched VoteFor in {contest_name}: {contest.VoteFor} != {vote_for}")
                     if max_ranked > 0:
                         isrcv.add(contest_id)
+                    omni_id = contmap_omni.get(contest_id,contest_id)
                     contline = jointsvline(contest_order, contest_id,
                                            contest_id_ext,
                                 contest_name, vote_for, max_ranked)
@@ -648,6 +712,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     raise FormatError(f"sov contest name mismatch {linenum}:{line}")
 
 
+                grand_total = {} # Computed totals
                 contest_arealines = []
                 contest_totallines = []
                 contest_rcvlines = []
@@ -674,46 +739,73 @@ with ZipFile("resultdata-raw.zip") as rzip:
                 # Next line should be headings
                 # Followed by 2 area lines to be skipped
                 skip_lines = 2
+                last_cand_col = 0
                 expected_cols = ncols
-                if (cols[0] != 'Precinct' or
-                    cols[1] != 'Registered Voters'):
+                if (cols[0] != 'Precinct'):
                     raise FormatError(f"sov column header mismatch {linenum}:{line}")
 
                 if in_turnout:
-                    if (cols[2] or cols[3] != 'Cards Cast' or cols[4] or
+                    if (cols[1] != 'Registered Voters' or
+                        cols[2] or cols[3] != 'Cards Cast' or cols[4] or
                         cols[5] != 'Voters Cast' or
                         cols[6] != '% Turnout'):
                         raise FormatError(f"sov turnout column header mismatch {linenum}:{line}")
                     rs_group = 'EMT'
                     hasrcv = haswritein = 0
                 else:
-                    total_col = ncols - 1
+                    total_col = -1
                     writein_col = 0
-                    if (cols[2] != 'Undervotes' or
-                        cols[4] != 'Overvotes' or
-                        cols[5] != 'Precinct' or
-                        cols[total_col] != 'Total Votes'):
+                    if (cols[1] == 'Times Cast' and
+                        cols[2] == 'Registered Voters' and
+                        cols[3] == '' and
+                        cols[4] == 'Undervotes' and
+                        cols[5] == 'Overvotes' and
+                        cols[6] == 'Precinct'):
+                        have_EDMV = True
+                        cand_start_col = 7
+                        subtotal_col = 0
+                    elif (cols[1] == 'Registered Voters' and
+                          cols[2] == 'Undervotes' and
+                          cols[4] == 'Overvotes' and
+                          cols[5] == 'Precinct'):
+                        have_EDMV = False
+                        cand_start_col = 6
+                    else:
                         raise FormatError(f"sov column header mismatch {linenum}:{cols}")
 
-                    for i in range(6, total_col, ):
+                    for i in range(cand_start_col, ncols):
                         name = cols[i]
                         if name == '':
                             continue
                         if name == 'Write-in':
                             heading = 'RSWri'
                             writein_col = i
+                        elif name == 'Total Votes':
+                            total_col = i
+                            continue
                         else:
-                            candidate_full_name = name
+                            last_cand_col = i
+                            if name.endswith(writeincand_suffix):
+                                is_writein_candidate = True
+                                name = name[:-len(writeincand_suffix)]
+                                if i+1 == ncols:
+                                    expected_cols = i+2
+                                #continue
                             cand_order += 1
                             candidx.append(i)
                             candidate_order = len(candidx)
+                            candidate_full_name = name
                             candnames.append(name)
                             candidate_party_id = ""
+                            is_writein_candidate = False
                             if name not in candbyname:
                                 print(f"Can't match {name} in {contest_id}:{contest_name}");
                                 cand_id = f'{contest_id}{candidate_order:02}'
                                 candidate_type = ""
-                                is_writein_candidate = False
+                                if is_writein_candidate:
+                                    candbyname[name] = CandidateManifest(
+                                        name, cand_id, cand_id,
+                                        contest_id, "WriteIn")
                             else:
                                 candidate = candbyname[name]
                                 cand_id = candidate.Id
@@ -732,6 +824,9 @@ with ZipFile("resultdata-raw.zip") as rzip:
                                             boolstr(is_writein_candidate))
                             candlist.append(candline)
                         # End loop over candidate names
+                    if total_col < 0:
+                        raise FormatError(f"sov column header mismatch (no total) {linenum}:{cols}")
+
                     haswritein = writein_col > 0
                     # Check for an RCV contest
                     hasrcv = contest_id in isrcv
@@ -757,41 +852,30 @@ with ZipFile("resultdata-raw.zip") as rzip:
                 # Column of data
                 if skip_area_pat.match(cols[0]):
                     # Superflous totals
+                    skip_area = True
                     continue
 
-                if expected_cols != ncols:
-                    raise FormatError(f"Mismatched Column count {ncols}!={expected_cols} {linenum}:{line}")
-
-                if args.zero:
-                    for i in range(2,len(cols)):
-                        cols[i] = "0"
-                if in_turnout:
-                    (RSReg, RSCards, RSCst) = [int(float(cols[i])) for i in [1,3,5]]
-                    RSTrn = cols[6]
-                    RSRej = 0 # Not available
-                    if RSTrn == "N/A":
-                        RSTrn = "0.0";
-                else:
-                    (RSReg, RSUnd, RSOvr) = [int(float(cols[i])) for i in [1,2,4]]
-                    total_votes = RSTot = int(float(cols[total_col]))
-                    RSCst = total_ballots = int(RSOvr)+int((int(RSTot)+int(RSUnd))/vote_for)
-                    # RSRej not available
-                    RSRej = RSExh = 0
-
-                no_voter_precinct = RSReg=="0" and not args.withzero
-
-                if cols[0] == "Cumulative - Total":
+                pct_col_0 = True
+                if cols[0] == "Cumulative":
                     area_id = "ALLPCTS"
                     isvbm_precinct = False
+                    subtotal_col = 0
+                    skip_area = False
+                    continue
+                elif cols[0] == "San Francisco - Total":
+                    area_id = "ALLPCTS"
+                    isvbm_precinct = False
+                    subtotal_col = -1
+                    skip_area = True
+
                 elif precinct_name_pat.match(cols[0]):
                     # Area is a precinct
+                    skip_area = False
                     # re.match(r'PCT (\d+)(?:/(\d+))?( MB)?$', cols[0])
                     (precinct_id, precinct_id2, vbmsuff
                      ) = precinct_name_pat.groups()
                     area_id = "PCT"+precinct_id
                     isvbm_precinct = vbmsuff != ""
-                    if no_voter_precinct:
-                        no_voter_precincts.add(contest_id)
                     precinct_name = precinct_name_orig = cols[0]
                     pctname2areaid[precinct_name_orig] = area_id
                     # Clean the name
@@ -806,14 +890,52 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     else:
                         cons_precincts = precinct_id
 
-                    newtsvlineu(foundpctcons, pctcons,
-                                    "Mismatched Precinct Consolidation",
-                                    precinct_id, precinct_name,
-                                    boolstr(isvbm_precinct),
-                                    boolstr(no_voter_precinct),
-                                    cons_precincts)
+                    if ncols==1:
+                        have_EDMV = True
+                    if have_EDMV:
+                        if ncols == expected_cols:
+                            raise FormatError(
+            f"Mismatched Precinct Column count {ncols}!=1 {linenum}:{line}")
+                        subtotal_col = 0
+                        continue
 
-                elif district_id_pat.match(cols[2]):
+                else:
+                    pct_col_0 = False
+
+                if (expected_cols != ncols and
+                    last_cand_col+1 != ncols):
+                    raise FormatError(f"Mismatched Column count {ncols}!={expected_cols}:{last_cand_col} {linenum}:{line}")
+
+                if args.zero:
+                    for i in range(3,len(cols)):
+                        cols[i] = "0"
+                    if in_turnout or not have_EDMV:
+                        cols[2] = "0"
+                    else:
+                        cols[1] = "0"
+                if in_turnout:
+                    (RSReg, RSCards, RSCst) = [int(float(cols[i])) for i in [1,3,5]]
+                    RSTrn = cols[6]
+                    RSRej = 0 # Not available
+                    if RSTrn == "N/A":
+                        RSTrn = "0.0";
+                elif not have_EDMV:
+                    (RSReg, RSUnd, RSOvr) = [int(float(cols[i])) for i in [1,2,4]]
+                    total_votes = RSTot = int(float(cols[total_col]))
+                    RSCst = total_ballots = int(RSOvr)+int((int(RSTot)+int(RSUnd))/vote_for)
+                    # RSRej not available
+                    RSRej = RSExh = 0
+                else:
+                    (RSCst, RSReg, RSUnd, RSOvr) = [int(float(cols[i])) for i in [1,2,4,5]]
+                    total_votes = RSTot = int(float(cols[total_col]))
+                    total_ballots = int(RSOvr)+int((int(RSTot)+int(RSUnd))/vote_for)
+                    RSRej = str(int(RSCst)-total_ballots)
+                    # RSRej not available
+                    RSExh = 0
+
+                no_voter_precinct = RSReg==0 and not args.withzero
+
+                if district_id_pat.match(cols[2]):
                     # Area is a district
                     # m = re.match(r'^(\w+):(.+)', cols[2])
                     codegroup, v = district_id_pat.groups()
@@ -825,16 +947,27 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     # Skip countywide (duplicate of totals
                     if no_voter_precinct or area_id in countywide_districts:
                         continue
-
-                else:
+                elif pct_col_0:
+                    pass
+                elif not subtotal_name_pat.match(cols[0]):
                     # Unmatched Area
                     raise FormatError(f"sov area mismatch {linenum}: {line}")
+                elif skip_area:
+                    continue
 
+                if cons_precincts:
+                    newtsvlineu(foundpctcons, pctcons,
+                                "Mismatched Precinct Consolidation",
+                                precinct_id, precinct_name,
+                                boolstr(isvbm_precinct),
+                                boolstr(no_voter_precinct),
+                                cons_precincts)
+                    cons_precincts = ''
                 # Map the subtotal_type
                 subtotal_type = 'TO'
                 if subtotal_col >= 0:
-                    if cols[subtotal_col] == 'Election Day':
-                        subtotal_type = 'ED'
+                    subtotal_type = vgnamemap.get(cols[subtotal_col],'')
+                    if subtotal_type == 'ED':
                         if area_id != "ALLPCTS":
                             checkDuplicate(pctturnout_reg, precinct_name_orig, RSReg,
                                         "Registration")
@@ -843,8 +976,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                             if isvbm_precinct or no_voter_precinct:
                                 continue    # Skip ED reporting for VBM-only precincts
                             ed_precincts += 1
-                    elif cols[subtotal_col] == 'VBM':
-                        subtotal_type = 'MV'
+                    elif subtotal_type == 'MV':
                         if area_id != "ALLPCTS":
                             checkDuplicate(pctturnout_reg, precinct_name_orig, RSReg,
                                             "Registration")
@@ -857,17 +989,55 @@ with ZipFile("resultdata-raw.zip") as rzip:
                                     mv_precincts += 1
                             if no_voter_precinct and not args.withzero:
                                 # Skip including zero precincts
+                                no_voter_precincts.add(area_id)
                                 continue
                         ## End not all precincts
+                    elif subtotal_type != 'TO':
+                        raise FormatError(f"subtotal name mismatch {linenum}: {line}")
+                if no_voter_precinct and subtotal_type == 'TO':
+                    no_voter_precincts.add(area_id)
+                    continue
                 if in_turnout:
-                    newtsvline(pctturnout, area_id, RSReg,
-                            RSCst)
+                    stats = [area_id, subtotal_type, RSReg, RSCst]
+                    outline = jointsvline(*stats)
+                    if area_id != "ALLPCTS":
+                        addGrandTotal(grand_total,stats)
+                    else:
+                        if grand_totals_wrong:
+                            total_precinct_ballots = grand_total['ED'][3]
+                            total_mail_ballots = grand_total['MV'][3]
+                        else:
+                            if subtotal_type == 'TO':
+                                total_precinct_ballots = RSCst
+                            elif subtotal_type == 'MV':
+                                total_mail_ballots = RSCst
+                            elif RSCst != total_precinct_ballots+total_mail_ballots:
+                                print(f"Turnout discrepancy {RSCst} != {total_precinct_ballots}+{total_mail_ballots}")
+                            # Validate subtotal
+                            if RSCst != grand_total[subtotal_type][3]:
+                                print(f"Turnout discrepancy {subtotal_type} {RSCst}!={grand_total[subtotal_type][3]}")
+                    if subtotal_type == 'ED':
+                        total_precinct_ballots = RSCst
+                    elif subtotal_type == 'MV':
+                        total_mail_ballots = RSCst
+                    else:
+                        if have_EDMV:
+                            newtsvline(pctturnout, area_id, RSReg,
+                                RSCst, total_precinct_ballots, total_mail_ballots)
+                        else:
+                            newtsvline(pctturnout, area_id, RSReg,
+                                RSCst)
+
+
                     if area_id == "ALLPCTS" and subtotal_type == 'TO':
                         # Enter turnout
+                        total_registration = RSReg
+                        if RSCst != total_precinct_ballots+total_mail_ballots:
+                            print(f"Turnout discrepancy {RSCst} != {total_precinct_ballots}+{total_mail_ballots}")
                         if have_EDMV:
                             contest_status_json.append({
                             "_id": "TURNOUT",
-                            "no_voter_precincts": [],
+                            "no_voter_precincts": [nv_pctlist],
                             "precincts_reporting": int(processed_done),
                             "total_precincts": int(total_precincts),
                             "reporting_time": report_time_str,
@@ -899,7 +1069,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         else:
                             contest_status_json.append({
                             "_id": "TURNOUT",
-                            "no_voter_precincts": [],
+                            "no_voter_precincts": [nv_pctlist],
                             "precincts_reporting": int(processed_done),
                             "total_precincts": int(total_precincts),
                             "reporting_time": report_time_str,
@@ -937,9 +1107,9 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         stats = [area_id, subtotal_type, RSReg, RSCst,
                                 RSRej, RSOvr, RSUnd, RSTot]
                     if haswritein:
-                        stats.append(cols[writein_col]) # First write-in
+                        stats.append(int(float(cols[writein_col]))) # First write-in
                     cand_start_col = len(stats)
-                    stats.extend([cols[i] for i in candidx])
+                    stats.extend([int(float(cols[i])) for i in candidx])
 
                     if area_id.startswith("PCT") and (
                         subtotal_col <0 or subtotal_type == 'ED' or
@@ -950,6 +1120,15 @@ with ZipFile("resultdata-raw.zip") as rzip:
 
                 outline = jointsvline(*stats)
                 if area_id == "ALLPCTS":
+                    if grand_totals_wrong:
+                        # Some MB precincts have missing ED registration
+                        grand_total['ED'][2] = grand_total['MV'][2]
+                        contest_totallines.append(jointsvline(*grand_total['ED']))
+                        contest_totallines.append(jointsvline(*grand_total['MV']))
+                        outline2 = jointsvline(*grand_total['TO'])
+                        if outline != outline2:
+                            print(f"grand_total discrepancy for {contest_id} \n   {outline}\n   {outline2}")
+
                     if subtotal_type == 'TO':
                         # Put grand totals first
 
@@ -1120,6 +1299,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                 # End all precincts
                 else:
                     # Not all precincts
+                    addGrandTotal(grand_total,stats)
                     # Append area lines separately
                     contest_arealines.append(outline)
 

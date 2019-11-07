@@ -106,18 +106,7 @@ foundRelease = None # First release # found is the one to download
 
 rcv_prefixes = set()
 
-content = urllib.request.urlopen(args.url)
-for lineb in content:
-    line = lineb.decode('utf-8')
-    m =re.search(r'href="([^"<>]*/20\d{6}/data/(20\d{6})/(?:([^/"]+)/)?(?:20\d{6}_)?([^/"]+))"',  line)
-    if not m:
-        continue
-
-    url, release, subdir, filename = m.groups()
-    if foundRelease is None:
-        foundRelease = release
-    elif release != foundRelease:
-        continue;
+def processfile(url, subdir, filename):
     if args.verbose:
         print(f"url:{url}")
 
@@ -126,10 +115,9 @@ for lineb in content:
         filename += "x"
         url += "x"
 
-    if args.noxml and filename.endswith(".xml"):
+    if args.noxml and filename.endswith("sov.xml"):
         # Skip the verbose xml
-        continue;
-
+        return;
 
     urlfile.write(f'{url}\t{filename}\n')
 
@@ -140,6 +128,30 @@ for lineb in content:
     # break; # for debug
     if subdir is not None:
         rcv_prefixes.add(subdir)
+
+content = urllib.request.urlopen(args.url)
+lastRelease = ''
+for lineb in content:
+    line = lineb.decode('utf-8')
+    m =re.search(r'href="([^"<>]*/20\d{6}/data/(20\d{6}(?:_\d)?)/(?:([^/"]+)/)?(?:20\d{6}_(?:\d_)?)?([^/"]+))"',  line)
+    if not m:
+        continue
+
+    url, release, subdir, filename = m.groups()
+    if not (foundRelease or re.search(r'sov.xls',filename)):
+        if release != lastRelease:
+            priorfiles = []
+            lastRelease = release
+        priorfiles.append((url,subdir,filename))
+        continue
+    if foundRelease is None:
+        foundRelease = release
+        for t in priorfiles:
+            processfile(*t)
+    elif release != foundRelease:
+        break;
+    processfile(url, subdir, filename)
+
 
 prefixpat = "|".join(rcv_prefixes)
 print(f'RCV_prefixes={prefixpat}')

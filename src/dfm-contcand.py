@@ -70,6 +70,19 @@ candheader = "iContestID|szBallotHeading|szSubHeading|szOfficeTitle|szOfficeAbbr
     "|szPartyName|sCampaignPhone|sCampaignFax|sCampaignMobile|szWebAddress"\
     "|sElectronicCandStmt"
 
+candheader2 = "iContestID|szBallotHeading|szSubHeading|szOfficeTitle|szOfficeAbbr1"\
+    "|szOfficeAbbr2|sGoesIntoExtension|iNumToVoteFor|iOfficeOnBallot"\
+    "|iNumQualified|iNumCandidates|iCandidateID|szCandidateName"\
+    "|szBallotDesignation|iIncumbent|dtQualified|dtSigsInLieuFiled_dt"\
+    "|dtSigsInLieuIssued_dt|dtDecOfIntentIssued_dt|dtDecOfIntentFiled_dt"\
+    "|dtNOMIssued_dt|dtNomFiled_dt|dtFilingFeePaid_dt|dtCandStmtFiled_dt"\
+    "|dtCandStmtIssued_dt|dtDecOfCandIssued_dt|dtDecOfCandFiled_dt"\
+    "|dtCodeFairCampFiled_dt|sUserCode1|sUserCode2|szResAddress1"\
+    "|szResAddress2|szResAddress3|szMailAddr1|szMailAddr2|szMailAddr3"\
+    "|szMailAddr4|szBusinessAddr1|szBusinessCity|szBusinessState"\
+    "|szBusinessZip|sBusinessPhone|sHomePhone|sFaxNo|szEmailAddress"\
+    "|sPartyAbbr|szPartyName|sCampaignPhone|sCampaignFax|sCampaignMobile"\
+    "|szWebAddress|sElectronicCandStmt"
 
 candlist_header = "contest_id|cand_id|cand_name|ballot_designation|cand_party|incumbent|qualified"
 contlist_header = "contest_seq|contest_id|district_id|headings|ballot_title|contest_abbr|contest_party|vote_for|on_ballot"
@@ -87,25 +100,45 @@ def boolstr(x) -> str:
 with ZipFile("ems-raw.zip") as rzip:
 
     with TSVReader("CFMJ001_ContestCandidateData.tsv", opener=rzip,
-                   binary_decode=True, encoding=DFM_ENCODING,
-                   validate_header=candheader) as r:
+                   binary_decode=True, encoding=DFM_ENCODING) as r:
+
+        if r.headerline == candheader: candformat = 1
+        elif r.headerline == candheader2: candformat = 2
+        else: raise RuntimeError(f"Mismatched header in CFMJ001_ContestCandidateData:\n   {r.headerline}\n!= {candheader2}")
 
         with TSVWriter("candlist-orig.tsv", False, separator, candlist_header) as w:
 
-            for (iContestID, szBallotHeading, szSubHeading, szOfficeTitle,
-                szOfficeAbbr1, szOfficeAbbr2, sGoesIntoExtension, iNumToVoteFor,
-                iOfficeOnBallot, iNumQualified, iNumCandidates, iCandidateID,
-                szCandidateName, szBallotDesignation, iIncumbent, dtQualified,
-                dtSigsInLieuFiled_dt, dtSigsInLieuIssued_dt, dtDecOfIntentIssued_dt,
-                dtDecOfIntentFiled_dt, dtNOMIssued_dt, dtNomFiled_dt,
-                dtFilingFeePaid_dt, dtCandStmtFiled_dt, dtCandStmtIssued_dt,
-                dtDecOfCandIssued_dt, dtDecOfCandFiled_dt, dtCodeFairCampFiled_dt,
-                sUserCode1, sUserCode2, szResAddress1, szResAddress2, szResAddress3,
-                szMailAddr1, szMailAddr2, szMailAddr3, szMailAddr4, sPhone, sAltPhone,
-                sFaxNo, szEmailAddress, sPartyAbbr, szPartyName, sCampaignPhone,
-                sCampaignFax, sCampaignMobile, szWebAddress, sElectronicCandStmt
-                ) in r.readlines():
+            for cols in r.readlines():
 
+                if candformat==2:
+                    (iContestID, szBallotHeading, szSubHeading, szOfficeTitle,
+                    szOfficeAbbr1, szOfficeAbbr2, sGoesIntoExtension, iNumToVoteFor,
+                    iOfficeOnBallot, iNumQualified, iNumCandidates, iCandidateID,
+                    szCandidateName, szBallotDesignation, iIncumbent, dtQualified,
+                    dtSigsInLieuFiled_dt, dtSigsInLieuIssued_dt, dtDecOfIntentIssued_dt,
+                    dtDecOfIntentFiled_dt, dtNOMIssued_dt, dtNomFiled_dt,
+                    dtFilingFeePaid_dt, dtCandStmtFiled_dt, dtCandStmtIssued_dt,
+                    dtDecOfCandIssued_dt, dtDecOfCandFiled_dt, dtCodeFairCampFiled_dt,
+                    sUserCode1, sUserCode2, szResAddress1, szResAddress2, szResAddress3,
+                    szMailAddr1, szMailAddr2, szMailAddr3, szMailAddr4, szBusinessAddr1,
+                    szBusinessCity, szBusinessState, szBusinessZip, sBusinessPhone,
+                    sHomePhone, sFaxNo, szEmailAddress, sPartyAbbr, szPartyName,
+                    sCampaignPhone, sCampaignFax, sCampaignMobile, szWebAddress,
+                    sElectronicCandStmt) = cols
+                else:
+                    (iContestID, szBallotHeading, szSubHeading, szOfficeTitle,
+                    szOfficeAbbr1, szOfficeAbbr2, sGoesIntoExtension, iNumToVoteFor,
+                    iOfficeOnBallot, iNumQualified, iNumCandidates, iCandidateID,
+                    szCandidateName, szBallotDesignation, iIncumbent, dtQualified,
+                    dtSigsInLieuFiled_dt, dtSigsInLieuIssued_dt, dtDecOfIntentIssued_dt,
+                    dtDecOfIntentFiled_dt, dtNOMIssued_dt, dtNomFiled_dt,
+                    dtFilingFeePaid_dt, dtCandStmtFiled_dt, dtCandStmtIssued_dt,
+                    dtDecOfCandIssued_dt, dtDecOfCandFiled_dt, dtCodeFairCampFiled_dt,
+                    sUserCode1, sUserCode2, szResAddress1, szResAddress2, szResAddress3,
+                    szMailAddr1, szMailAddr2, szMailAddr3, szMailAddr4, sPhone, sAltPhone,
+                    sFaxNo, szEmailAddress, sPartyAbbr, szPartyName, sCampaignPhone,
+                    sCampaignFax, sCampaignMobile, szWebAddress, sElectronicCandStmt
+                    ) = cols
                 # The CFMJ001 is brain-damaged-- the CFMJ001_ContestCandidateData
                 # has missing contest definition data, and can be lost if there
                 # are no candidates. The on/off ballot indicator may be wrong if there

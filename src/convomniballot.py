@@ -613,10 +613,7 @@ def conv_bt_json(j:Dict, bt:str):
         if len(paragraphs)>1:
             raise FormatError(f"Multiple text paragraphs for {sequence}:{title}")
 
-        if contmap.get(external_id,"") != "":
-            mapped_id = contmap[external_id]
-        else:
-            mapped_id = external_id
+        mapped_id = mapContestID(external_id)
 
         if contest_type != "header" and contest_type != "text":
             # Append contest ID to contlist
@@ -756,11 +753,11 @@ def conv_bt_json(j:Dict, bt:str):
                     writein_lines += 1
                     continue
                 cand_id = str(o["id"])
+                cand_external_id = sequence+cand_external_id
 
-                if cand_external_id in candmap:
-                    cand_mapped_id = candmap[cand_external_id]
-                else:
-                    cand_mapped_id = cand_external_id
+                cand_mapped_id = mapCandID(cand_external_id)
+                if mapped_id == "342":
+                    print(f"id={cand_id}:{cand_external_id}:{cand_mapped_id}")
                 candids.append(cand_external_id)
                 cand_seq = str(o["sequence"]).zfill(3)
                 cand_mapped_seq = candseq.get(cand_external_id,cand_seq)
@@ -810,16 +807,19 @@ def conv_bt_json(j:Dict, bt:str):
                 contj['choices'] = sorted(contj['choices'],
                                       key=lambda c:c['sequence'])
             # Insert manually added candidates
-            if not found and external_id in added_contcand:
-                print(f"external_id={external_id} in added_contcand")
-                contj['choices'].extend(added_contcand[external_id])
+            if not found and mapped_id in added_contcand:
+                print(f"external_id={mapped_id} in added_contcand")
+                for candj in added_contcand[mapped_id]:
+                    contj['choices'].append(candj)
+                    candj['sequence']=len(contj['choices'])
 
             candlist = ' '.join(candids)
             if not found and contest_type != "header" and contest_type != "text":
                 if _type == "office":
                     contj['writeins_allowed'] = writein_lines
-                if external_id in distmap:
-                    contj['voting_district'] = distmap[external_id]
+                contj['voting_district'] = (distmap[external_id]
+                                if external_id in distmap else
+                                config.election_voting_district)
                 if isrcv:
                     if writein_lines:
                         contj['result_style'] = 'EMRW'
@@ -938,6 +938,16 @@ The special precinct ID "composite" and style ID "composite" are used to
 represent all precincts and contests.
 '''
 
+def mapContestID(contest_id:str # contest ID to map
+                 )->str:  # Returns
+    mapped_id = contmap.get(contest_id,"")
+    return mapped_id if mapped_id != "" else contest_id
+
+def mapCandID(cand_id:str # candidate ID to map
+                 )->str:  # Returns
+    mapped_id = candmap.get(cand_id,"")
+    return mapped_id if mapped_id != "" else cand_id
+
 with open("lookups.json") as f:
     lookups = json.load(f)
 
@@ -948,7 +958,7 @@ for p in lookups['precincts'].values():
     pct2extid[p['id']] = p['pid'] + pctsplitsep + p.get('sid','')
 
 # Check for a contest map
-if config.contest_map_file:
+if config.contest_map_file and os.path.isfile(config.contest_map_file) :
     have_contmap = True
     with TSVReader(config.contest_map_file) as r:
         contmap = r.load_simple_dict(0,1)
@@ -985,9 +995,11 @@ if config.candidate_map_file:
 else:
     have_candmap = False
 
+print(f"candmap={candmap}")
 
 #Check for added candidates (including write-in)
 added_contcand = {}
+writein_candlines = []
 
 if os.path.isfile("candlist-fix.tsv"):
     candlist_fix_header = "sequence|cont_external_id|cand_seq|cand_id|external_id"\
@@ -1001,10 +1013,8 @@ if os.path.isfile("candlist-fix.tsv"):
             newtsvline(candlines, sequence, cont_external_id,
                         cand_seq, cand_id, external_id,
                         title, party, designation, cand_type)
-            if external_id in candmap:
-                cand_mapped_id = candmap[external_id]
-            else:
-                cand_mapped_id = external_id
+            mapped_id = mapContestID(cont_external_id)
+            cand_mapped_id = mapCandID(external_id)
             candj = {
                 "_id": cand_mapped_id,
                 "_id_ext": external_id,
@@ -1016,11 +1026,34 @@ if os.path.isfile("candlist-fix.tsv"):
                 candj['ballot_designation'] = str2istr(designation)
             if cand_type == "writein":
                 candj['is_writein'] = True
-            if cont_external_id not in added_contcand:
-                added_contcand[cont_external_id] = []
-            added_contcand[cont_external_id].append(candj)
+            if mapped_id  not in added_contcand:
+                added_contcand[mapped_id] = []
+            added_contcand[mapped_id].append(candj)
 
+# Load QualifiedWritin from CVR manifest
+filename = "../resultdata/CandidateManifest.tsv"
+if os.path.isfile(filename):
+    with TSVReader(filename,
+        validate_header="Description|Id|ExternalId|ContestId|Type") as r:
+        seq=900
+        for (Description, Id, ExternalId, ContestId, Type) in r.readlines():
+            if Type != "QualifiedWriteIn":
+                continue
+            seq += 1
+            if ContestId not in added_contcand:
+                added_contcand[ContestId] = []
+            newtsvline(writein_candlines,ContestId,seq,Id, Description)
+            added_contcand[ContestId].append({
+                "_id": Id,
+                "_id_ext": ExternalId,
+                "ballot_title": str2istr(Description),
+                'is_writein': True
+                })
 
+if writein_candlines:
+    putfile("candlist-writein.tsv",
+            "contest_id|candidate_order|candidate_id|candidate_full_name",
+            writein_candlines)
 
 # Read the composite ballot
 try:
@@ -1099,25 +1132,32 @@ arealist = [{
 
 no_voter_precincts = []
 
-with TSVReader("../ems/pctcons.tsv") as r:
-    if r.headerline != "cons_precinct_id|cons_precinct_name|is_vbm|no_voters"\
-    "|precinct_ids":
-        raiseFormatError(f"Unmatched pctcons.tsv header {r.headerline}")
-    for cols in r.readlines():
-        (cons_precinct_id, cons_precinct_name, is_vbm, no_voters,
-         precinct_ids) = cols
-        area = {
-            "_id": "PCT"+cons_precinct_id,
-            "classification": "Precinct",
-            "name": cons_precinct_name,
-            "short_name": cons_precinct_name
-        }
-        if is_vbm=='Y':
-            area['is_vbm'] = True
-        if no_voters=='Y':
-            area['has_no_voters'] = True
-            no_voter_precincts.append(cons_precinct_id)
-        arealist.append(area)
+pctconsfile = None
+for path in ["../ems/pctcons.tsv","../resultdata/pctcons-sov.tsv"]:
+    if os.path.isfile(path):
+        pctconsfile = path
+if not pctconsfile:
+    print("Missing ../ems/pctcons.tsv")
+else:
+    with TSVReader(path) as r:
+        if r.headerline != "cons_precinct_id|cons_precinct_name|is_vbm|no_voters"\
+        "|precinct_ids":
+            raiseFormatError(f"Unmatched pctcons.tsv header {r.headerline}")
+        for cols in r.readlines():
+            (cons_precinct_id, cons_precinct_name, is_vbm, no_voters,
+            precinct_ids) = cols
+            area = {
+                "_id": "PCT"+cons_precinct_id,
+                "classification": "Precinct",
+                "name": cons_precinct_name,
+                "short_name": cons_precinct_name
+            }
+            if is_vbm=='Y':
+                area['is_vbm'] = True
+            if no_voters=='Y':
+                area['has_no_voters'] = True
+                no_voter_precincts.append(cons_precinct_id)
+            arealist.append(area)
 
 # Load the result groups by district
 if os.path.isfile("reporting_groups.tsv"):
@@ -1125,6 +1165,7 @@ if os.path.isfile("reporting_groups.tsv"):
         reporting_groups_by_distid = r.load_simple_dict(0,1)
 else:
     reporting_groups_by_distid = {}
+    print("Run extresultdist.py to extract reporting groups")
 
 with TSVReader("../ems/distclass.tsv") as r:
     if r.headerline != "District_Code|Classification|District_Name|District_Short_Name":
