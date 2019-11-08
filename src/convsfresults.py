@@ -655,6 +655,31 @@ with ZipFile("resultdata-raw.zip") as rzip:
 
     # Read turnout details
 
+    # Read the summary psv file
+    sep = '|'
+    sovfile = "summary.psv"
+    summary_reporting = {}
+    summary_precincts = {}
+    if sovfile in zipfilenames:
+        with rzip.open(sovfile) as f:
+            contest_id = 'TURNOUT'
+            precincts_reported_pat = re2(r'Precincts Reported: (\d+) of (\d+)')
+            linenum = 0
+            for line in f:
+                line = decodeline(line, SF_SOV_ENCODING)
+                if precincts_reported_pat.match(line):
+                    if not contest_id:
+                        print(f"summary contest name mismatch {linenum}:{line}")
+                        continue
+                    (summary_reporting[contest_id],
+                     summary_precincts[contest_id])=precincts_reported_pat.groups()
+                    contest_id = ''
+                    continue
+                if line in ContestManifest:
+                    if contest_id != '':
+                        print(f"summary precincts reported mismatch {linenum}:{line}")
+                    contest_id = ContestManifest[line].Id
+
     # Read the SOV results
     for readDictrict in [False, True]:
       for sovfile in ["sov.psv","sov.tsv","psov.psv","psov.tsv",'']:
@@ -1141,6 +1166,8 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     if area_id == "ALLPCTS" and subtotal_type == 'TO':
                         # Enter turnout
                         total_registration = RSReg
+                        processed_done = summary_reporting.get("TURNOUT",processed_done)
+                        total_precincts = summary_precincts.get("TURNOUT",total_precincts)
                         if RSCst != total_precinct_ballots+total_mail_ballots:
                             print(f"Turnout discrepancy {RSCst} != {total_precinct_ballots}+{total_mail_ballots}")
                         if have_EDMV:
@@ -1345,6 +1372,8 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         #if args.verbose:
                             #print(f"  precincts ed/mv/nv={ed_precincts}/{mv_precincts}/{nv_precincts} of {total_precincts}")
 
+                        processed_done = summary_reporting.get(contest_id,processed_done)
+                        total_precincts = summary_precincts.get(contest_id,total_precincts)
                         # Append json file output
                         conteststat = {
                             'choices': [],

@@ -32,7 +32,7 @@ VBM_CHALLENGES_URL = "https://sfelections.org/tools/election_data/vbm_challenge_
 VC_TURNOUT_URL = "https://sfelections.org/tools/election_data/vc.php?E=2018-11-06"
 
 # To substitute the desired date in the URL pattern
-url_date_re = re.compile('2018-11-06')
+url_date_re = re.compile('2019-11-05')
 
 
 def parse_args():
