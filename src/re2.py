@@ -145,7 +145,7 @@ class re2:
         if not self.m: return None
         return self.m.group(*args)
 
-    def __getitem__(i):
+    def __getitem__(self, i):
         if not self.m: return None
         return self.m[i]
 
