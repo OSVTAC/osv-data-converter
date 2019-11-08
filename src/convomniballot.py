@@ -619,7 +619,12 @@ def conv_bt_json(j:Dict, bt:str):
             # Append contest ID to contlist
             contlist.append(mapped_id)
 
-        if not found:
+        if found:
+            # Save info found in other ballot types
+            if contest_type == "header" or contest_type == "text":
+                lastheader = sequence
+            approval_required = approval_required_by_contest.get(contest_id,'')
+        else:
             approval_required = ''
             if contest_type == "header" or contest_type == "text":
                 # Process headers separately
@@ -714,8 +719,6 @@ def conv_bt_json(j:Dict, bt:str):
 
                             break
                 contj['choices'] = []
-        else:
-            approval_required = approval_required_by_contest.get(contest_id,'')
 
 
         if contest_type == "retention":
@@ -995,7 +998,7 @@ if config.candidate_map_file:
 else:
     have_candmap = False
 
-print(f"candmap={candmap}")
+#print(f"candmap={candmap}")
 
 #Check for added candidates (including write-in)
 added_contcand = {}
