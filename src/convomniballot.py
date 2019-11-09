@@ -404,12 +404,16 @@ def get_dict_entry(node, keylist:List[str]):
 
 def form_i18n_str(node:Dict)->Dict:
     # Change zh-haunt unto just zh
+    en = node['value'].strip()
     zh = node['translations'].pop('zh-hant',None)
     if zh:
+        if zh.startswith(en+' '):
+            # The zh includes english
+            zh = zh[len(en)+1:]
         node['translations']['zh'] = zh
     for lang in node['translations'].keys():
          foundlang.add(lang)
-    return {"en":node['value'].strip(), **node['translations'] }
+    return {"en":en, **node['translations'] }
 
 def join_i18n_str(
         istr:Dict,          # i18n string to be modified

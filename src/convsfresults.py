@@ -1286,6 +1286,22 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         winning_status = {}
                         cand_success = {}   # True/False for winning_status
 
+                        processed_done = summary_reporting.get(contest_id,processed_done)
+                        total_precincts = summary_precincts.get(contest_id,total_precincts)
+
+                        # Create json file output
+                        conteststat = {
+                            'choices': [],
+                            'precincts_reporting': int(processed_done),
+                            'reporting_time': '',
+                            'result_stats': [],
+                            'total_precincts': int(total_precincts)
+                            }
+                        conteststat['_id'] = contest_id
+                        conteststat['reporting_time'] = report_time_str
+                        conteststat['no_voter_precincts'] = nv_pctlist
+                        conteststat['rcv_rounds'] = rcv_rounds
+
                         if total_votes:
                             approval_required = approval_required_by_omni_id.get(
                                 omni_id,'')
@@ -1314,6 +1330,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                                     winning_status[lose_id] = 'N'
                                     cand_success[win_id] = True
                                     cand_success[lose_id] = False
+                                    #print(f"votes_required={votes_required}/{total_votes} {contest_id}:{contest_name} success={conteststat['success']} y/n={candids[0]}:{candids[1]}/{candvotes[0]}:{candvotes[1]}")
                             else:
                                 candvotes_by_id = zip(candids, candvotes)
                                 # Compute winners
@@ -1372,20 +1389,6 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         #if args.verbose:
                             #print(f"  precincts ed/mv/nv={ed_precincts}/{mv_precincts}/{nv_precincts} of {total_precincts}")
 
-                        processed_done = summary_reporting.get(contest_id,processed_done)
-                        total_precincts = summary_precincts.get(contest_id,total_precincts)
-                        # Append json file output
-                        conteststat = {
-                            'choices': [],
-                            'precincts_reporting': int(processed_done),
-                            'reporting_time': '',
-                            'result_stats': [],
-                            'total_precincts': int(total_precincts)
-                            }
-                        conteststat['_id'] = contest_id
-                        conteststat['reporting_time'] = report_time_str
-                        conteststat['no_voter_precincts'] = nv_pctlist
-                        conteststat['rcv_rounds'] = rcv_rounds
                         # Split the totallines into a matrix
                         totals = [ line.rstrip().split(separator)
                                   for line in contest_totallines]
