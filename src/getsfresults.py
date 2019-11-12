@@ -117,6 +117,7 @@ def processfile(url, subdir, filename):
 
     if args.noxml and filename.endswith("sov.xml"):
         # Skip the verbose xml
+        if args.verbose: print(f"Skip {filename}")
         return;
 
     urlfile.write(f'{url}\t{filename}\n')

@@ -37,7 +37,7 @@ import re
 import nameutil
 
 from config import (Config, config_pattern_list, eval_config_pattern,
-                    config_strlist_dict, InvalidConfig,
+                    config_strlist_dict, InvalidConfig, config_str_dict,
                     config_pattern_map_dict, eval_config_pattern_map)
 from re2 import re2
 from tsvio import TSVReader
@@ -112,6 +112,7 @@ config_attrs = {
     "contest_map_file": str,
     "candidate_map_file": str,
     "approval_required": config_strlist_dict,
+    "short_description": config_str_dict,
     "runoff": config_runoff,
     "contest_name_corrections": config_pattern_map_dict,
     "election_voting_district": str,
@@ -691,6 +692,12 @@ def conv_bt_json(j:Dict, bt:str):
                     "header_id": lastheader,
                     "ballot_title": titles[0],
                     "name": name}
+
+                contest_name = name['en']
+                if (config.short_description and
+                    contest_name in config.short_description):
+                    contj['short_description'] = str2istr(
+                        config.short_description[contest_name])
 
                 if len(titles)>1:
                     contj['ballot_subtitle'] = titles[1]

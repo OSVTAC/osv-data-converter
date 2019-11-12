@@ -167,9 +167,27 @@ def config_whole_pattern_map(l:List[str])->Pattern:
     return [reform_regex_map(i,True) for i in l]
 
 
+def config_str_dict(d:Dict[str,List[str]])->Dict[str,List[str]]:
+    """
+    Validates a dictionary of strings
+    """
+    if d is None:
+        d = {} # Default is an empty dict
+    elif not isinstance(d,dict):
+        raise InvalidConfig(f"Invalid Config Dictionary")
+    else:
+        # Validate each dict entry as list of str
+        for k,v in d.items():
+            if v is None:
+                d[k] = v = ''
+            if not isinstance(k,str) or not isinstance(v,str):
+                raise InvalidConfig(f"Invalid Config Entry")
+    return d
+
+
 def config_strlist_dict(d:Dict[str,List[str]])->Dict[str,List[str]]:
     """
-    Joins a list of simple patterns
+    Validates a dictionary of string lists
     """
     if d is None:
         d = {} # Default is an empty dict
