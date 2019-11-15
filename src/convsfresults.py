@@ -195,6 +195,8 @@ def parse_args():
                         help='make a zero report')
     parser.add_argument('-s', dest='dirsuffix',
                         help='set the output directory (../out-orr default)')
+    parser.add_argument('-M', dest='nombpct', action='store_true',
+                        help='skip ED report for MB precincts')
     parser.add_argument('-z', dest='withzero', action='store_true',
                         help='include precincts with zero voters')
 
@@ -1099,7 +1101,11 @@ with ZipFile("resultdata-raw.zip") as rzip:
                                         "Registration")
                             checkDuplicate(pctturnout_ed, precinct_name_orig, RSCst,
                                         "Election Day Turnout")
-                            if isvbm_precinct or no_voter_precinct:
+                            if args.nombpct and isvbm_precinct and not RSCst:
+                                continue
+                            if no_voter_precinct:
+                                if RSCst:
+                                    print(f"Skipped ED NV precinct {linenum}: {line}")
                                 continue    # Skip ED reporting for VBM-only precincts
                             ed_precincts += 1
                     elif subtotal_type == 'MV':
