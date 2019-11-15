@@ -709,7 +709,6 @@ with ZipFile("resultdata-raw.zip") as rzip:
         have_EDMV = True # sov has only total, no ED MV subtotals
 
         if readDictrict:
-            grand_totals_wrong = False
             col0_header = 'District'
         else:
             col0_header = 'Precinct'
@@ -724,7 +723,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
         district_category_pat=re2(r'^(CONGRESSIONAL|ASSEMBLY|SUPERVISORIAL|NEIGHBORHOOD)(?:$|[\|\t])')
         # If grand_totals_wrong compute Cumulative
         skip_area_pat = (re2(r'^(Cumulative|Cumulative - Total|City and County - Total)$')
-                         if grand_totals_wrong else
+                         if grand_totals_wrong and not readDictrict else
                          re2(r'^(San Francisco - Total|Cumulative - Total|City and County - Total)$'))
         writeincand_suffix = "␤Qualified Write In"
         TURNOUT_LINE_SUFFIX = '% Turnout'
@@ -835,6 +834,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                 rs_group = ''       # Set of Result Stats
                 contest_id_eds = ""
                 processed_done = total_precincts = 0
+                total_precinct_ballots = total_mail_ballots = 0
                 # Stats for counting precincts
                 nv_precincts = ed_precincts = mv_precincts = 0
                 if not in_turnout:
@@ -1135,10 +1135,13 @@ with ZipFile("resultdata-raw.zip") as rzip:
 
                     if area_id != "ALLPCTS":
                         addGrandTotal(grand_total,stats)
+                    elif readDictrict:
+                        continue
                     else:
                         if grand_totals_wrong:
                             total_precinct_ballots = grand_total['ED'][3]
                             total_mail_ballots = grand_total['MV'][3]
+                            print(f'Turnout grand totals {total_precinct_ballots}/{total_mail_ballots}\n')
                         else:
                             if subtotal_type == 'TO':
                                 total_precinct_ballots = RSCst
@@ -1160,7 +1163,6 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         else:
                             newtsvline(pctturnout, area_id, RSReg,
                                 RSCst)
-                        total_precinct_ballots = total_mail_ballots = 0
 
 
                     if area_id == "ALLPCTS" and subtotal_type == 'TO':
@@ -1169,7 +1171,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         processed_done = summary_reporting.get("TURNOUT",processed_done)
                         total_precincts = summary_precincts.get("TURNOUT",total_precincts)
                         if RSCst != total_precinct_ballots+total_mail_ballots:
-                            print(f"Turnout discrepancy {RSCst} != {total_precinct_ballots}+{total_mail_ballots}")
+                            print(f"Turnout discrepancy {RSCst} != {total_precinct_ballots+total_mail_ballots} ({total_precinct_ballots}+{total_mail_ballots})")
                         if have_EDMV:
                             contest_status_json.append({
                             "_id": "TURNOUT",
@@ -1256,7 +1258,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
 
                 outline = jointsvline(*stats)
                 if area_id == "ALLPCTS":
-                    if grand_totals_wrong:
+                    if grand_totals_wrong :
                         # Some MB precincts have missing ED registration
                         grand_total['ED'][2] = grand_total['MV'][2]
                         contest_totallines.append(jointsvline(*grand_total['ED']))
