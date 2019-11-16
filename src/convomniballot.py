@@ -33,6 +33,7 @@ import json
 import os
 import os.path
 import re
+import html
 
 import nameutil
 
@@ -392,6 +393,14 @@ For 2019-11:
                             "value": "Businessman / Taxpayer Advocate"
 '''
 
+def decode_JSON_String(s:str)->str:
+    """
+    Converts HTML encoding within the string back into UTF.
+    This might be upgraded later to accomodate included HTML tags so would
+    preserve &amp; &gt; &lt;.
+    """
+    return html.unescape(s)
+
 def get_dict_entry(node, keylist:List[str]):
     """
     If the node is a dict and the has the key, return it's value else None.
@@ -406,15 +415,18 @@ def get_dict_entry(node, keylist:List[str]):
 def form_i18n_str(node:Dict)->Dict:
     # Change zh-haunt unto just zh
     en = node['value'].strip()
-    zh = node['translations'].pop('zh-hant',None)
+    translations = node['translations']
+    zh = translations.pop('zh-hant',None)
     if zh:
         if zh.startswith(en+' '):
             # The zh includes english
             zh = zh[len(en)+1:]
-        node['translations']['zh'] = zh
-    for lang in node['translations'].keys():
+        translations['zh'] = zh
+    for lang,v in translations.items():
          foundlang.add(lang)
-    return {"en":en, **node['translations'] }
+         translations[lang] = decode_JSON_String(v)
+
+    return {"en":decode_JSON_String(en), **translations }
 
 def join_i18n_str(
         istr:Dict,          # i18n string to be modified
