@@ -118,6 +118,7 @@ config_attrs = {
     "contest_name_corrections": config_pattern_map_dict,
     "election_voting_district": str,
     "election_base_suffix": str,
+    "cand_extid_prefix": bool,
     "turnout_result_style": str
     }
 
@@ -125,6 +126,7 @@ config_default = {
     "bt_digits": 3,
     "turnout_result_style": "EMTE",
     "election_voting_district": "0",
+    "cand_extid_prefix": True,
     "election_base_suffix": ""
     }
 
@@ -605,13 +607,8 @@ def conv_bt_json(j:Dict, bt:str):
             vote_for_istr = None
             vote_for = ""
 
-        title = merge_titles(titles)
-        text = merge_titles(paragraphs)
-
-        if title=='':
-            print(f"Strange title: {contest_id}|{sequence}|{paragraphs}")
-
         if isrcv and vote_for == "":
+            #print(f"RCV title: {contest_id}|{sequence}|{merge_titles(titles)}|{merge_titles(paragraphs)}")
             if len(paragraphs)==1:
                 vote_for_istr = paragraphs[0]
                 paragraphs = []
@@ -625,6 +622,14 @@ def conv_bt_json(j:Dict, bt:str):
             else:
                 print(f"Failed to match number in {vote_for_istr['en']}")
                 vote_for = ""
+            if titles[1]['en'].startswith('Vote your first,'):
+                del titles[1]
+
+        title = merge_titles(titles)
+        text = merge_titles(paragraphs)
+
+        if title=='':
+            print(f"Strange title: {contest_id}|{sequence}|{paragraphs}")
 
 
         if len(paragraphs)>1:
@@ -779,11 +784,12 @@ def conv_bt_json(j:Dict, bt:str):
                     writein_lines += 1
                     continue
                 cand_id = str(o["id"])
-                cand_external_id = sequence+cand_external_id
+                if config.cand_extid_prefix:
+                    cand_external_id = sequence+cand_external_id
 
                 cand_mapped_id = mapCandID(cand_external_id)
-                if mapped_id == "342":
-                    print(f"id={cand_id}:{cand_external_id}:{cand_mapped_id}")
+                #if mapped_id == "342":
+                    #print(f"id={cand_id}:{cand_external_id}:{cand_mapped_id}")
                 candids.append(cand_external_id)
                 cand_seq = str(o["sequence"]).zfill(3)
                 cand_mapped_seq = candseq.get(cand_external_id,cand_seq)

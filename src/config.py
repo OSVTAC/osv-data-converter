@@ -264,6 +264,10 @@ def validate_attr(v:Any,         # Value to test
     """
     if v == None or not validate: return v, False     # Return None as-is
 
+    if validate in argtypeconv:
+        # Convert to string or other type
+        validate = argtypeconv[validate]
+
     if callable(validate):
         # Validate is a function to check and convert
         try:
@@ -306,9 +310,6 @@ def validate_attr(v:Any,         # Value to test
         v = type(validate)(*args)
         #print(k,v)
 
-    elif validate in argtypeconv and v!=None:
-        # Convert to string or other type
-        v = argtypeconv[validate](v)
     else:
         # [TODO] No support for other types
          logging.error(f"Unmatched configuration file entry: {k}:{validate}")
