@@ -72,7 +72,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     print(f"Mismatch name {name} becomes {shan[h]}")
                 found += 1
             elif name in shav and shav[name] != h:
-                print(f"Mismatch for {name}\n{h} !=\n{sha[name]}\n")
+                print(f"Mismatch for {name}\n{h} !=\n{shav[name]}\n")
                 mismatch += 1
             elif name != b'sha512.csv' and name != b'urls.tsv':
                 print(f"No match for {name}")

@@ -622,7 +622,7 @@ def conv_bt_json(j:Dict, bt:str):
             else:
                 print(f"Failed to match number in {vote_for_istr['en']}")
                 vote_for = ""
-            if titles[1]['en'].startswith('Vote your first,'):
+            if len(titles)==2 and titles[1]['en'].startswith('Vote your first,'):
                 del titles[1]
 
         title = merge_titles(titles)

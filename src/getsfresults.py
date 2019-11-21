@@ -101,6 +101,12 @@ xls2tsv_opts = " -p" if args.pipe else ""
 os.makedirs("resultdata-raw", exist_ok=True)
 
 urlfile = open("resultdata-raw/urls.tsv",'w');
+# Get the existing release
+priorReleaseLine = ''
+releaseFile = "resultdata-raw/lastrelease.txt"
+if os.path.isfile(releaseFile):
+    with open(releaseFile) as f:
+        priorReleaseLine = f.read().strip()
 
 foundRelease = None # First release # found is the one to download
 
@@ -132,8 +138,12 @@ def processfile(url, subdir, filename):
 
 content = urllib.request.urlopen(args.url)
 lastRelease = ''
+releaseTitle = ''
 for lineb in content:
     line = lineb.decode('utf-8')
+    m=re.search(r'<h2 class="panel-title">(.+)</h2>', line)
+    if m:
+        releaseTitle = m.group(1)
     m =re.search(r'href="([^"<>]*/20\d{6}/data/(20\d{6}(?:_\d)?)/(?:([^/"]+)/)?(?:20\d{6}_(?:\d_)?)?([^/"]+))"',  line)
     if not m:
         continue
@@ -147,6 +157,14 @@ for lineb in content:
         continue
     if foundRelease is None:
         foundRelease = release
+        foundTitle = releaseTitle
+        releaseLine = f"{foundRelease}:{foundTitle}"
+        if releaseLine == priorReleaseLine:
+            print(f"Same as prior: {releaseLine}")
+            exit(1)
+        print(releaseLine)
+        with open(releaseFile,"w") as f:
+            print(releaseLine, file=f)
         for t in priorfiles:
             processfile(*t)
     elif release != foundRelease:
@@ -159,6 +177,5 @@ print(f'RCV_prefixes={prefixpat}')
 
 prefout = open('resultdata-raw/rcv_prefixes.txt','w');
 prefout.write(prefixpat);
-
 
 

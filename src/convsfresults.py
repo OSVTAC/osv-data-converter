@@ -35,6 +35,7 @@ import string
 import operator, functools
 
 # Local file imports
+from shautil import load_sha_file, load_sha_filename, SHA_FILE_NAME
 from tsvio import TSVReader
 from re2 import re2
 
@@ -63,6 +64,8 @@ Creates the following files:
 # -
 
 VERSION='0.0.1'     # Program version
+
+CONTEST_STATUS_FORMAT = '0.2'
 
 SF_ENCODING = 'ISO-8859-1'
 SF_SOV_ENCODING ='UTF-8'
@@ -254,6 +257,25 @@ json_dump_args = PP_JSON_DUMP_ARGS if args.pretty else DEFAULT_JSON_DUMP_ARGS
 
 separator = "|" if args.pipe else "\t"
 
+file_sha = {}
+infile_sha = {}
+load_sha_filename(SHA_FILE_NAME, file_sha)
+load_sha_filename("../vr/"+SHA_FILE_NAME, file_sha, "vr/")
+load_sha_filename("../omniballot/"+SHA_FILE_NAME, file_sha, "omniballot/")
+
+def append_sha_list(
+    filename: str      # File name read
+    ):
+    """
+    Adds the file_sha entry to infile_sha_list if it exists
+    """
+    global infile_sha, file_sha
+    print(f"append_sha_list({filename})={file_sha.get(filename,'')}")
+    if filename in file_sha:
+        infile_sha[filename] = file_sha[filename]
+
+
+
 def putfile(
     filename: str,      # File name to be created
     headerline: str,    # First line with field names (without \n)
@@ -407,6 +429,7 @@ def loadEligible()->str:
     """
     try:
         with TSVReader("../vr/county.tsv") as reader:
+            append_sha_list("vr/county.tsv")
             for l in reader.readlines():
                 if l[0] == "San Francisco":
                     return int(float(l[1]))
@@ -444,6 +467,7 @@ def loadRCVData(rzip,                   # zipfile context
     linenum = 0
     inHead = 1
     with rzip.open(filename) as f:
+        append_sha_list(filename)
         i = 0
         for line in f:
             line = decodeline(line, SF_SOV_ENCODING)
@@ -534,9 +558,6 @@ total_mail_ballots = 0
 total_precincts = 0
 candbyname = {}
 
-# Output file struct
-contest_status_json = []
-
 isrcv = set() # Contest IDs with RCV
 
 no_voter_precincts = set() # IDs for precincts with no registered voters
@@ -547,12 +568,15 @@ no_voter_precincts = set() # IDs for precincts with no registered voters
 have_contmap = os.path.isfile("contmap.tsv")
 if have_contmap:
     with TSVReader("contmap.tsv") as r:
+        append_sha_list("contmap.tsv")
         contmap = r.load_simple_dict(0,1)
     with TSVReader("candmap.tsv") as r:
+        append_sha_list("candmap.tsv")
         candmap = r.load_simple_dict(0,1)
 have_contmap = os.path.isfile("../omniballot/contmap.tsv")
 if have_contmap:
     with TSVReader("../omniballot/contmap.tsv") as r:
+        append_sha_list("omniballot/contmap.tsv")
         # Map ID to omniballot_id
         contmap_omni = r.load_simple_dict(1,0)
 else:
@@ -561,6 +585,7 @@ else:
 have_runoff = os.path.isfile("../omniballot/runoff-omni.tsv")
 if have_runoff:
     with TSVReader("../omniballot/runoff-omni.tsv") as r:
+        append_sha_list("omniballot/runoff-omni.tsv")
         runoff_by_contid = r.loaddict(2)
 else:
     runoff_by_contid = {}
@@ -570,6 +595,7 @@ eligible_voters = loadEligible()
 
 #Load approval_required
 with TSVReader("../omniballot/contlist-omni.tsv") as r:
+    append_sha_list("omniballot/contlist-omni.tsv")
     approval_required_by_omni_id = r.load_simple_dict(3,7)
 
 #print("approval_required=",approval_required_by_omni_id)
@@ -587,6 +613,7 @@ def load_json_table(
     Extract and load the json data to a parsed object. Create a tsv
     """
     with rzip.open(filename) as f:
+        append_sha_list(filename)
         tsvlines = []
         tsvfilename = filename[:-5]+'.tsv'
         objtype = namedtuple(filename[:-5],attrs.keys())
@@ -632,6 +659,12 @@ CandidateManifest_attrs= {
 CandidateManifest = namedtuple("CandidateManifest",CandidateManifest_attrs.keys())
 
 with ZipFile("CVR_Export.zip") as rzip:
+    try:
+        with rzip.open(SHA_FILE_NAME) as f:
+            load_sha_file(f, file_sha)
+    except:
+        pass
+
     ContestManifest_by_Id = {}
     ContestManifest = load_json_table(rzip,"ContestManifest.json","5.2.18.2",
                            ContestManifest_attrs, "Description",
@@ -655,7 +688,38 @@ with ZipFile("resultdata-raw.zip") as rzip:
     for info in rfiles:
         zipfilenames.add(info.filename)
 
+    # Load sha256 hashes
+    if SHA_FILE_NAME in zipfilenames:
+        with rzip.open(SHA_FILE_NAME) as f:
+            load_sha_file(f, file_sha)
+
+    #print(f'file_sha={file_sha}\n')
+
+    # Read the release ID and title
+    results_id = ''
+    results_title = ''
+    if "lastrelease.txt" in zipfilenames:
+        with rzip.open("lastrelease.txt") as f:
+            append_sha_list("lastrelease.txt")
+            last_release_line = f.read().decode('utf-8').strip()
+            m = re.match(r'(.*):(.*)', last_release_line)
+            if m:
+                results_id, results_title = m.groups()
+            else:
+                print(f'Unmatched lastrelease.txt:{last_release_line}')
+
     # Read turnout details
+
+    # Output file struct
+    contest_status_contests = []
+    contest_status_json = {
+        'contest_status_format':CONTEST_STATUS_FORMAT,
+        "reporting_time": datetime.now().isoformat(timespec='seconds',sep=' '),
+        "results_id": results_id,
+        "results_title": results_title,
+        "turnout": {},
+        'contests': contest_status_contests
+        }
 
     # Read the summary psv file
     sep = '|'
@@ -664,6 +728,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
     summary_precincts = {}
     if sovfile in zipfilenames:
         with rzip.open(sovfile) as f:
+            append_sha_list(sovfile)
             contest_id = 'TURNOUT'
             precincts_reported_pat = re2(r'Precincts Reported: (\d+) of (\d+)')
             linenum = 0
@@ -698,6 +763,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
       if args.verbose:
         print(f"Reading {sovfile}")
       with rzip.open(sovfile) as f:
+        append_sha_list(sovfile)
         linenum = 0
         candlist = []
         contlist = []
@@ -767,6 +833,8 @@ with ZipFile("resultdata-raw.zip") as rzip:
                 if args.verbose:
                     print(f"Page {page}: {report_time_str}")
                 in_turnout = False
+                if page == '1':
+                    contest_status_json["reporting_time"]=report_time_str
                 if readDictrict and contest_name:
                     flushcontest(contest_order, contest_id, contest_name,
                                 headerline, contest_rcvlines,
@@ -1147,7 +1215,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         if grand_totals_wrong:
                             total_precinct_ballots = grand_total['ED'][3]
                             total_mail_ballots = grand_total['MV'][3]
-                            print(f'Turnout grand totals {total_precinct_ballots}/{total_mail_ballots}\n')
+                            #print(f'Turnout grand totals {total_precinct_ballots}/{total_mail_ballots}\n')
                         else:
                             if subtotal_type == 'TO':
                                 total_precinct_ballots = RSCst
@@ -1179,7 +1247,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         if RSCst != total_precinct_ballots+total_mail_ballots:
                             print(f"Turnout discrepancy {RSCst} != {total_precinct_ballots+total_mail_ballots} ({total_precinct_ballots}+{total_mail_ballots})")
                         if have_EDMV:
-                            contest_status_json.append({
+                            contest_status_json['turnout'] = {
                             "_id": "TURNOUT",
                             "no_voter_precincts": [nv_pctlist],
                             "precincts_reporting": int(processed_done),
@@ -1209,9 +1277,9 @@ with ZipFile("resultdata-raw.zip") as rzip:
                                     "results": ["0","0","0"]
                                 }
                             ]
-                            })
+                            }
                         else:
-                            contest_status_json.append({
+                            contest_status_json['turnout'] = {
                             "_id": "TURNOUT",
                             "no_voter_precincts": [nv_pctlist],
                             "precincts_reporting": int(processed_done),
@@ -1239,7 +1307,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                                     "results": [str(RSRej)]
                                 }
                             ]
-                        })
+                        }
 
 
                     continue
@@ -1422,7 +1490,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                             i += 1
                             k += 1
 
-                        contest_status_json.append(conteststat)
+                        contest_status_contests.append(conteststat)
 
                         # Form a line with summary stats by ID
                         newtsvline(contstats, contest_id,
@@ -1463,6 +1531,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     pctturnout)
         else:
             # Put the json contest status
+            #contest_status_json['input_file_sha']=infile_sha
             with open(f"{OUT_DIR}/contest-status.json",'w') as outfile:
                 json.dump(contest_status_json, outfile, **json_dump_args)
 
