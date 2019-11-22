@@ -55,7 +55,7 @@ Reads the following files:
   * [TODO] config-odc.yaml - Configuration file with conversion options
 
 Creates the following files:
-  * contest-status.json
+  * results.json
   * results-{contest_id}.tsv
   * A set of intermediate files extracted from the resultdata-raw
 
@@ -65,7 +65,7 @@ Creates the following files:
 
 VERSION='0.0.1'     # Program version
 
-CONTEST_STATUS_FORMAT = '0.2'
+RESULTS_FORMAT = '0.2'
 
 SF_ENCODING = 'ISO-8859-1'
 SF_SOV_ENCODING ='UTF-8'
@@ -711,14 +711,14 @@ with ZipFile("resultdata-raw.zip") as rzip:
     # Read turnout details
 
     # Output file struct
-    contest_status_contests = []
-    contest_status_json = {
-        'contest_status_format':CONTEST_STATUS_FORMAT,
-        "reporting_time": datetime.now().isoformat(timespec='seconds',sep=' '),
-        "results_id": results_id,
-        "results_title": results_title,
+    results_contests = []
+    results_json = {
+        '_results_format':RESULTS_FORMAT,
+        "_reporting_time": datetime.now().isoformat(timespec='seconds',sep=' '),
+        "_results_id": results_id,
+        "_results_title": results_title,
         "turnout": {},
-        'contests': contest_status_contests
+        'contests': results_contests
         }
 
     # Read the summary psv file
@@ -834,7 +834,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     print(f"Page {page}: {report_time_str}")
                 in_turnout = False
                 if page == '1':
-                    contest_status_json["reporting_time"]=report_time_str
+                    results_json["_reporting_time"]=report_time_str
                 if readDictrict and contest_name:
                     flushcontest(contest_order, contest_id, contest_name,
                                 headerline, contest_rcvlines,
@@ -1247,12 +1247,11 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         if RSCst != total_precinct_ballots+total_mail_ballots:
                             print(f"Turnout discrepancy {RSCst} != {total_precinct_ballots+total_mail_ballots} ({total_precinct_ballots}+{total_mail_ballots})")
                         if have_EDMV:
-                            contest_status_json['turnout'] = {
+                            results_json['turnout'] = {
                             "_id": "TURNOUT",
                             "no_voter_precincts": [nv_pctlist],
                             "precincts_reporting": int(processed_done),
                             "total_precincts": int(total_precincts),
-                            "reporting_time": report_time_str,
                             "result_stats": [
                                 {
                                     "_id": "RSEli",
@@ -1279,12 +1278,11 @@ with ZipFile("resultdata-raw.zip") as rzip:
                             ]
                             }
                         else:
-                            contest_status_json['turnout'] = {
+                            results_json['turnout'] = {
                             "_id": "TURNOUT",
                             "no_voter_precincts": [nv_pctlist],
                             "precincts_reporting": int(processed_done),
                             "total_precincts": int(total_precincts),
-                            "reporting_time": report_time_str,
                             "result_stats": [
                                 {
                                     "_id": "RSEli",
@@ -1308,6 +1306,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                                 }
                             ]
                         }
+                        # Unused: "reporting_time": report_time_str,
 
 
                     continue
@@ -1369,12 +1368,11 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         conteststat = {
                             'choices': [],
                             'precincts_reporting': int(processed_done),
-                            'reporting_time': '',
                             'result_stats': [],
                             'total_precincts': int(total_precincts)
                             }
                         conteststat['_id'] = contest_id
-                        conteststat['reporting_time'] = report_time_str
+                        #Unused: conteststat['reporting_time'] = report_time_str
                         conteststat['no_voter_precincts'] = nv_pctlist
                         conteststat['rcv_rounds'] = rcv_rounds
 
@@ -1490,7 +1488,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                             i += 1
                             k += 1
 
-                        contest_status_contests.append(conteststat)
+                        results_contests.append(conteststat)
 
                         # Form a line with summary stats by ID
                         newtsvline(contstats, contest_id,
@@ -1531,9 +1529,9 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     pctturnout)
         else:
             # Put the json contest status
-            #contest_status_json['input_file_sha']=infile_sha
-            with open(f"{OUT_DIR}/contest-status.json",'w') as outfile:
-                json.dump(contest_status_json, outfile, **json_dump_args)
+            #results_json['input_file_sha']=infile_sha
+            with open(f"{OUT_DIR}/results.json",'w') as outfile:
+                json.dump(results_json, outfile, **json_dump_args)
 
             # Put the precinct consolidation file
             putfile("pctcons-sov.tsv",
