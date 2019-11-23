@@ -476,7 +476,10 @@ with ZipFile("resultdata-raw.zip") as rzip:
     # Read the release ID and title
     results_id = ''
     results_title = ''
-    if "lastrelease.txt" in zipfilenames:
+    if args.zero:
+        results_json["_results_id"] = results_id = 'zero'
+        results_json["_results_title"] = results_title = {'en':'Zero Report'}
+    elif "lastrelease.txt" in zipfilenames:
         with rzip.open("lastrelease.txt") as f:
             last_release_line = f.read().decode('utf-8').strip()
             m = re.match(r'(.*):(.*)', last_release_line)
