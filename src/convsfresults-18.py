@@ -55,7 +55,7 @@ Reads the following files:
   * [TODO] config-odc.yaml - Configuration file with conversion options
 
 Creates the following files:
-  * contest-status.json
+  * results.json
   * results-{contest_id}.tsv
   * A set of intermediate files extracted from the resultdata-raw
 
@@ -64,6 +64,7 @@ Creates the following files:
 # -
 
 VERSION='0.0.2'     # Program version
+RESULTS_FORMAT = '0.2'
 
 SF_ENCODING = 'ISO-8859-1'
 SF_SOV_ENCODING ='UTF-8'
@@ -416,7 +417,13 @@ total_mail_ballots = 0
 total_precincts = 0
 
 # Output file struct
-contest_status_json = []
+results_contests = []
+results_json = {
+    '_results_format':RESULTS_FORMAT,
+    "_reporting_time": datetime.now().isoformat(timespec='seconds',sep=' '),
+    "turnout": {},
+    'contests': results_contests
+    }
 
 isrcv = set() # Contest IDs with RCV
 
@@ -466,6 +473,19 @@ with ZipFile("resultdata-raw.zip") as rzip:
 
     # Read turnout details
 
+    # Read the release ID and title
+    results_id = ''
+    results_title = ''
+    if "lastrelease.txt" in zipfilenames:
+        with rzip.open("lastrelease.txt") as f:
+            last_release_line = f.read().decode('utf-8').strip()
+            m = re.match(r'(.*):(.*)', last_release_line)
+            if m:
+                results_id, results_title = m.groups()
+                results_json["_results_id"] = results_id
+                results_json["_results_title"] = {'en':results_title}
+            else:
+                print(f'Unmatched lastrelease.txt:{last_release_line}')
 
     # Get the ID maps in masterlookup.txt
     # Has ID maps only for RCV contests
@@ -518,6 +538,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
 
     if args.verbose:
         print("Reading summary.txt")
+    skip = False
     with rzip.open("summary.txt") as f:
         line = f.readline().decode(SF_ENCODING).strip()
         if line != header:
@@ -626,11 +647,11 @@ with ZipFile("resultdata-raw.zip") as rzip:
                 contestorder[contest_id] = contest_order
                 precinct_count[contest_id] = int(total_precincts)
 
-                # Prepare the contest-status.json
+                # Prepare the results.json
                 contest_status[contest_id] = conteststat = {
                     'choices': [],
                     'precincts_reporting': int(processed_done),
-                    'reporting_time': '',
+                    #'reporting_time': '',
                     'result_stats': [],
                     'total_precincts': int(total_precincts)
                     }
@@ -694,16 +715,18 @@ with ZipFile("resultdata-raw.zip") as rzip:
 
         report_time = datetime.strptime(m.group(1), "%B %d, %Y at %I:%M:%S %p")
         report_time_str = report_time.isoformat(' ')
+        results_json['_reporting_time'] = report_time_str
+
         contest_order = 0
         contest_name = contest_name_line = ""
 
         # Enter turnout
-        contest_status_json.append({
+        results_json['turnout'] = {
             "_id": "TURNOUT",
             "no_voter_precincts": [],
             "precincts_reporting": total_precincts_reporting,
             "total_precincts": total_precincts,
-            "reporting_time": report_time_str,
+            #"reporting_time": report_time_str,
             "result_stats": [
                 {
                     "_id": "RSEli",
@@ -728,7 +751,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     "results": ["0","0","0"]
                 }
             ]
-        })
+        }
 
         district_name_abbrs = set()
 
@@ -1112,7 +1135,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
 
                         # Append json file output
                         conteststat['_id'] = contest_id
-                        conteststat['reporting_time'] = report_time_str
+                        #conteststat['reporting_time'] = report_time_str
                         conteststat['no_voter_precincts'] = nv_pctlist
                         conteststat['rcv_rounds'] = rcv_rounds
                         # Split the totallines into a matrix
@@ -1140,7 +1163,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                             i += 1
                             k += 1
 
-                        contest_status_json.append(conteststat)
+                        results_contests.append(conteststat)
 
                         # Form a line with summary stats by ID
                         newtsvline(contstats, contest_id,
@@ -1163,8 +1186,8 @@ with ZipFile("resultdata-raw.zip") as rzip:
         # End Loop over input lines
 
         # Put the json contest status
-        with open(f"{OUT_DIR}/contest-status.json",'w') as outfile:
-            json.dump(contest_status_json, outfile, **json_dump_args)
+        with open(f"{OUT_DIR}/results.json",'w') as outfile:
+            json.dump(results_json, outfile, **json_dump_args)
 
         # Put the precinct consolidation file
         putfile("pctcons-sov.tsv",

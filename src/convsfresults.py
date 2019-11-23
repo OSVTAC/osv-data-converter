@@ -716,7 +716,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
         '_results_format':RESULTS_FORMAT,
         "_reporting_time": datetime.now().isoformat(timespec='seconds',sep=' '),
         "_results_id": results_id,
-        "_results_title": results_title,
+        "_results_title": {'en':results_title},
         "turnout": {},
         'contests': results_contests
         }
