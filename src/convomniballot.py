@@ -1089,15 +1089,35 @@ if os.path.isfile("candlist-fix.tsv"):
                 added_contcand[mapped_id] = []
             added_contcand[mapped_id].append(candj)
 
+writeinfiles = [
+    "../resultdata/CandidateManifest.tsv",
+    "../resultdata/candlist-sov.tsv",
+    ]
+writein_header = [
+    "Description|Id|ExternalId|ContestId|Type",
+    "contest_id|candidate_order|candidate_id|candidate_type"\
+        "|candidate_full_name|candidate_party_id|is_writein_candidate",
+    ]
+for wiformat in range(0,len(writeinfiles)):
+    filename = writeinfiles[wiformat]
+    if not os.path.isfile(filename): continue
 # Load QualifiedWritin from CVR manifest
-filename = "../resultdata/CandidateManifest.tsv"
-if os.path.isfile(filename):
     with TSVReader(filename,
-        validate_header="Description|Id|ExternalId|ContestId|Type") as r:
+        validate_header=writein_header[wiformat]) as r:
         seq=900
-        for (Description, Id, ExternalId, ContestId, Type) in r.readlines():
-            if Type != "QualifiedWriteIn":
-                continue
+        for cols in r.readlines():
+            if wiformat==0:
+                # Load QualifiedWritin from CVR manifest
+                Description, Id, ExternalId, ContestId, Type = cols
+                if Type != "QualifiedWriteIn":
+                    continue
+            else:
+                # Extract from the SOV XLS
+                (ContestId, candidate_order, Id, candidate_type, Description,
+                 candidate_party_id, is_writein_candidate) = cols
+                ExternalId = 'WI'+Id
+                if is_writein_candidate != 'Y':
+                    continue;
             seq += 1
             if ContestId not in added_contcand:
                 added_contcand[ContestId] = []
@@ -1111,8 +1131,9 @@ if os.path.isfile(filename):
 
 if writein_candlines:
     putfile("candlist-writein.tsv",
-            "contest_id|candidate_order|candidate_id|candidate_full_name",
-            writein_candlines)
+        "contest_id|candidate_order|candidate_id|candidate_full_name",
+        writein_candlines)
+
 
 # Read the composite ballot
 try:
