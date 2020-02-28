@@ -38,11 +38,12 @@ import operator, functools
 from shautil import load_sha_file, load_sha_filename, SHA_FILE_NAME
 from tsvio import TSVReader
 from re2 import re2
+from config import Config, config_idlist
 
 # Library imports
 from datetime import datetime
 from collections import OrderedDict, namedtuple
-from typing import List, Pattern, Match, Dict
+from typing import List, Pattern, Match, Dict, Set, TextIO
 from zipfile import ZipFile
 
 DESCRIPTION = """\
@@ -52,7 +53,7 @@ sfgov.org Election Results - Detailed Reports
 Reads the following files:
   * resultdata-raw.zip/psov.psv - Downloaded SF results
   * [TODO] ../election.json - Election definition data
-  * [TODO] config-odc.yaml - Configuration file with conversion options
+  * [TODO] config-results.yaml - Configuration file with conversion options
 
 Creates the following files:
   * results.json
@@ -62,6 +63,8 @@ Creates the following files:
 """
 #TODO:
 # -
+
+_log = logging.getLogger(__name__)
 
 VERSION='0.0.1'     # Program version
 
@@ -76,15 +79,23 @@ OUT_DIR = "../out-orr/resultdata"
 SOV_FILE = "psov"
 
 have_EDMV = True
+have_RSCst = True
+
 check_duplicate_turnout = False
 
 grand_totals_wrong = True # Bug in SOV: Cumulative not computed
+#grand_totals_wrong = False # Bug in SOV: Cumulative not computed
 
 DEFAULT_JSON_DUMP_ARGS = dict(sort_keys=True, separators=(',\n',':'), ensure_ascii=False)
 PP_JSON_DUMP_ARGS = dict(sort_keys=True, indent=4, ensure_ascii=False)
 
 approval_fraction_pat = re2(r'^(\d+)/(\d+)$')
 approval_percent_pat = re2(r'^(\d+)%$')
+
+CONFIG_FILE = "config-results.yaml"
+config_attrs = dict(
+    card_turnout_contests=config_idlist
+    )
 
 # Collect district names for map
 #df = open("distabbr.txt",'w')
@@ -190,6 +201,8 @@ def parse_args():
     parser.add_argument('--version', action='version', version='%(prog)s '+VERSION)
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='enable verbose info printout')
+    parser.add_argument('-d', '--debug', action='store_true',
+                        help='enable debug info printout')
     parser.add_argument('-p', dest='pipe', action='store_true',
                         help='use pipe separator else tab')
     parser.add_argument('-P', dest='pretty', action='store_true',
@@ -253,6 +266,15 @@ elif args.zero:
 if not os.path.exists(OUT_DIR):
     os.makedirs(OUT_DIR)
 
+config = Config(CONFIG_FILE, valid_attrs=config_attrs)
+CardContest = {}
+CardTurnOut = []
+if config.card_turnout_contests:
+    for i,v in enumerate(config.card_turnout_contests):
+        CardContest[v] = i+1
+
+#print(config.card_turnout_contests)
+
 json_dump_args = PP_JSON_DUMP_ARGS if args.pretty else DEFAULT_JSON_DUMP_ARGS
 
 separator = "|" if args.pipe else "\t"
@@ -260,8 +282,23 @@ separator = "|" if args.pipe else "\t"
 file_sha = {}
 infile_sha = {}
 load_sha_filename(SHA_FILE_NAME, file_sha)
+load_sha_filename("../../state/vr/"+SHA_FILE_NAME, file_sha, "vr/")
 load_sha_filename("../vr/"+SHA_FILE_NAME, file_sha, "vr/")
 load_sha_filename("../omniballot/"+SHA_FILE_NAME, file_sha, "omniballot/")
+
+def get_zip_filenames(
+    zipfile                 # Zip file to read (ZipExtFile)
+    )->Set[str]:            # Returned set of filenames
+    """
+    Reads the directory of filenames in a zip archive and returns the
+    list as a set.
+    """
+    # Create a set with the zip file names
+    zipfilenames = set()
+    for info in zipfile.infolist():
+        zipfilenames.add(info.filename)
+
+    return zipfilenames
 
 def append_sha_list(
     filename: str      # File name read
@@ -361,8 +398,8 @@ def  flushcontest(contest_order, contest_id, contest_name,
     Write out the results detail file for a contest
     """
     filename = f'{OUT_DIR}/results-{contest_id}.tsv'
-    #if readDictrict:
-        #print(f"flushcontest({filename}) l={len(contest_arealines)}")
+    if args.debug:
+        print(f"flushcontest({filename}) l={len(contest_arealines)}")
     if not contest_arealines:
         return
     with open(filename,'a' if readDictrict else 'w') as outfile:
@@ -428,7 +465,8 @@ def loadEligible()->str:
     Returns the count as a string, a numbmer or null.
     """
     try:
-        with TSVReader("../vr/county.tsv") as reader:
+        vrfile = "../vr/county.tsv" if os.path.isfile("../vr/county.tsv") else "../../state/vr/county.tsv"
+        with TSVReader(vrfile) as reader:
             append_sha_list("vr/county.tsv")
             for l in reader.readlines():
                 if l[0] == "San Francisco":
@@ -658,35 +696,86 @@ CandidateManifest_attrs= {
 
 CandidateManifest = namedtuple("CandidateManifest",CandidateManifest_attrs.keys())
 
-with ZipFile("CVR_Export.zip") as rzip:
-    try:
-        with rzip.open(SHA_FILE_NAME) as f:
-            load_sha_file(f, file_sha)
-    except:
-        pass
+ContestManifest_by_Id = {}
+ContestManifest = {}
+CandidateManifest_by_ContestId = {}
+CandidateManifest_by_Id = {}
 
-    ContestManifest_by_Id = {}
-    ContestManifest = load_json_table(rzip,"ContestManifest.json","5.2.18.2",
-                           ContestManifest_attrs, "Description",
-                           ContestManifest_by_Id, "Id")
-    CandidateManifest_by_ContestId = {}
-    CandidateManifest_by_Id = load_json_table(rzip,"CandidateManifest.json","5.2.18.2",
-                           CandidateManifest_attrs, "Id");
+haveCVRExport = os.path.isfile("CVR_Export.zip")
+if haveCVRExport:
+    with ZipFile("CVR_Export.zip") as rzip:
+        try:
+            with rzip.open(SHA_FILE_NAME) as f:
+                load_sha_file(f, file_sha)
+        except:
+            pass
 
-    for r in CandidateManifest_by_Id.values():
-        if not r.ContestId in CandidateManifest_by_ContestId:
-            CandidateManifest_by_ContestId[r.ContestId] = {}
-        CandidateManifest_by_ContestId[r.ContestId][r.Description] = r
+        ContestManifest = load_json_table(rzip,"ContestManifest.json","5.2.18.2",
+                            ContestManifest_attrs, "Description",
+                            ContestManifest_by_Id, "Id")
+        CandidateManifest_by_Id = load_json_table(rzip,"CandidateManifest.json","5.2.18.2",
+                            CandidateManifest_attrs, "Id");
 
+        for r in CandidateManifest_by_Id.values():
+            if not r.ContestId in CandidateManifest_by_ContestId:
+                CandidateManifest_by_ContestId[r.ContestId] = {}
+            CandidateManifest_by_ContestId[r.ContestId][r.Description] = r
+
+
+# Process the registration and turnout stored in turnoutdata-raw.zip
+
+Party_IDs = ['AI','DEM','GRN','LIB','PF','REP','NPP']
+
+EWM_header = "Voting Precinct|Polls|VBM|Total"
+VBM_header = "VotingPrecinctID|VotingPrecinctName|MailBallotPrecinct|BalType"\
+    "|Assembly|Congressional|Senatorial|Supervisorial|Issued"\
+    "|American_Independent_Issued|Democratic_Issued|Green_Issued"\
+    "|Libertarian_Issued|Peace_&_Freedom_Issued|Republican_Issued"\
+    "|No_Party_Preference_Issued|No_Party_Preference_(AI)_Issued"\
+    "|No_Party_Preference_(LIB)_Issued|No_Party_Preference_(DEM)_Issued"\
+    "|Returned|American_Independent_Returned|Democratic_Returned"\
+    "|Green_Returned|Libertarian_Returned|Peace_&_Freedom_Returned"\
+    "|Republican_Returned|No_Party_Preference_Returned"\
+    "|No_Party_Preference_(AI)_Returned|No_Party_Preference_(LIB)_Returned"\
+    "|No_Party_Preference_(DEM)_Returned|Accepted"\
+    "|American_Independent_Accepted|Democratic_Accepted|Green_Accepted"\
+    "|Libertarian_Accepted|Peace_&_Freedom_Accepted|Republican_Accepted"\
+    "|No_Party_Preference_Accepted|No_Party_Preference_(AI)_Accepted"\
+    "|No_Party_Preference_(LIB)_Accepted|No_Party_Preference_(DEM)_Accepted"\
+    "|Pending|American_Independent_Pending|Democratic_Pending|Green_Pending"\
+    "|Libertarian_Pending|Peace_&_Freedom_Pending|Republican_Pending"\
+    "|No_Party_Preference_Pending|No_Party_Preference_(AI)_Pending"\
+    "|No_Party_Preference_(LIB)_Pending|No_Party_Preference_(DEM)_Pending"\
+    "|Challenged|American_Independent_Challenged|Democratic_Challenged"\
+    "|Green_Challenged|Libertarian_Challenged|Peace_&_Freedom_Challenged"\
+    "|Republican_Challenged|No_Party_Preference_Challenged"\
+    "|No_Party_Preference_(AI)_Challenged|No_Party_Preference_(LIB)_Challenged"\
+    "|No_Party_Preference_(DEM)_Challenged"
+
+
+VBM_turnout = {}
+EWM_turnout = {}
+
+with ZipFile("turnoutdata-raw.zip") as rzip:
+    zipfilenames = get_zip_filenames(rzip)
+
+    if "vbmprecinct.csv" in zipfilenames:
+        with TSVReader("vbmprecinct.csv",opener=rzip,binary_decode=True,
+                       validate_header=VBM_header) as f:
+            VBM_turnout = f.loaddict()
+
+    if "ewmr057.psv" in zipfilenames:
+        with TSVReader("ewmr057.psv",opener=rzip,binary_decode=True,
+                       validate_header=EWM_header) as f:
+            EWM_turnout = f.loaddict()
+
+# Save registration by subtotal and precinct
+RSRegSave = dict(TO={},ED={},MV={})
 
 # Process the downloaded SF results stored in resultdata-raw.zip
 with ZipFile("resultdata-raw.zip") as rzip:
-    rfiles = rzip.infolist()
-
     # Create a set with the zip file names
-    zipfilenames = set()
-    for info in rfiles:
-        zipfilenames.add(info.filename)
+    zipfilenames = get_zip_filenames(rzip)
 
     # Load sha256 hashes
     if SHA_FILE_NAME in zipfilenames:
@@ -748,6 +837,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     contest_id = ContestManifest[line].Id
 
     # Read the SOV results
+    have_dsov = "dpsov.psv" in zipfilenames or "dsov.psv" in zipfilenames
     for readDictrict in [False, True]:
       for sovfile in ["sov.psv","sov.tsv","psov.psv","psov.tsv",'']:
         if readDictrict:
@@ -757,9 +847,10 @@ with ZipFile("resultdata-raw.zip") as rzip:
             sep = '|' if sovfile.endswith("psv") else '\t'
             break
       if sovfile=='':
-         if not readDictrict:
-              raise FormatError(f"Unmatched SOV XLSX file")
-
+            raise FormatError(f"Unmatched SOV XLSX file")
+      if sovfile=='d':
+          print("No dsov file found.")
+          break
       if args.verbose:
         print(f"Reading {sovfile}")
       with rzip.open(sovfile) as f:
@@ -785,14 +876,17 @@ with ZipFile("resultdata-raw.zip") as rzip:
         # Patterns for line type
         page_header_pat = re2(r'\f?Page: (\d+) of \d+[\|\t]+(20\d\d-\d\d-\d\d[ :\d]+)$')
         contest_header_pat=re2(r'^(.*)(?: \(Vote for +(\d+)\))?$')
-        precinct_name_pat = re2(r'PCT (\d+)(?:/(\d+))?( MB)?$')
+        precinct_name_pat = re2(r'^(?:Pct|PCT) (\d+)(?:/(\d+))?( MB)?$')
         subtotal_name_pat = re2(r'^(Election Day|Vote by Mail|Total)$')
         # Senate omitted to skip
         district_category_pat=re2(r'^(CONGRESSIONAL|ASSEMBLY|SUPERVISORIAL|NEIGHBORHOOD)(?:$|[\|\t])')
         # If grand_totals_wrong compute Cumulative
-        skip_area_pat = (re2(r'^(Cumulative|Cumulative - Total|City and County - Total)$')
+        skip_area_pat_str = (r'^(Cumulative|Cumulative - Total|Countywide|Countywide - Total|City and County - Total)$'
                          if grand_totals_wrong and not readDictrict else
-                         re2(r'^(San Francisco - Total|Cumulative - Total|City and County - Total)$'))
+                         r'^(Electionwide|San Francisco|Cumulative|Countywide|City and County) - Total$')
+        skip_area_pat = re2(skip_area_pat_str)
+        heading_pat = re2(r'Statement of the Vote(?: -)?( \d+)?(.Districts and Neighborhoods)?$')
+
         writeincand_suffix = "␤Qualified Write In"
         TURNOUT_LINE_SUFFIX = '% Turnout'
 
@@ -817,10 +911,16 @@ with ZipFile("resultdata-raw.zip") as rzip:
         skip_to_category = next_is_district = False
         contest_name=''
 
+        if args.debug:
+            print(f"skip_area_pat={skip_area_pat_str}")
+
         for line in f:
             line = decodeline(line, SF_SOV_ENCODING)
-            if line == "" or re.search(r'Statement of the Vote( \d+)?(.Districts and Neighborhoods)?$',line):
-                # Ignore blank lines
+            if line == "": continue
+            if heading_pat.search(line):
+                zero_report = heading_pat.group(1)==' 0'
+                #print(f"zero_report={zero_report}")
+                # Ignore heading lines
                 continue
 
             if skip_lines:
@@ -854,18 +954,23 @@ with ZipFile("resultdata-raw.zip") as rzip:
             line = re.sub(r'Registered ?␤Voters','Registered Voters',line)
 
             if contest_name=='':
+                if args.debug: print(f"Heading line {linenum}:'{line}'")
                 if line.endswith(TURNOUT_LINE_SUFFIX):
                     in_turnout = True
                     contest_id = contest_name = 'TURNOUT'
                 elif contest_header_pat.match(line):
                     contest_name, vote_for = contest_header_pat.groups()
+                    # Trim duplicate party suffix
+                    contest_name = re.sub(r' *␤[A-Z]{1,3}$','',contest_name)
                     contest_order += 1
+                    contest_order_str = str(contest_order).zfill(3)
                     if not vote_for:
                         vote_for = 1
                     vote_for = int(vote_for)
                     if contest_name not in ContestManifest:
-                        print(f"Unmatched contest {contest_name}")
-                        contest_id = 'X'+str(contest_order).zfill(3)
+                        if haveCVRExport:
+                            print(f"Unmatched contest {contest_name}")
+                        contest_id = 'X'+contest_order_str
                         candbyname = {}
                         max_ranked = 0
                         contest_id_ext = 0
@@ -881,7 +986,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     if max_ranked > 0:
                         isrcv.add(contest_id)
                     omni_id = contmap_omni.get(contest_id,contest_id)
-                    contline = jointsvline(contest_order, contest_id,
+                    contline = jointsvline(contest_order_str, contest_id,
                                            contest_id_ext,
                                 contest_name, vote_for, max_ranked)
                     contlist.append(contline)
@@ -889,6 +994,10 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     raise FormatError(f"sov contest name mismatch {linenum}:{line}")
 
 
+                card = CardContest.get(contest_id,0)
+                if card:
+                    #Create an empty list to save turnout by subtotal and precinct
+                    CardTurnOut.append(dict(TO={},ED={},MV={}))
                 grand_total = {} # Computed totals
                 contest_arealines = []
                 contest_totallines = []
@@ -941,13 +1050,18 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         cols[5] == 'Overvotes' and
                         cols[6] == col0_header):
                         have_EDMV = True
+                        have_RSCst = True
                         cand_start_col = 7
                         subtotal_col = 0
+
                     elif (cols[1] == 'Registered Voters' and
                           cols[2] == 'Undervotes' and
                           cols[4] == 'Overvotes' and
                           cols[5] == col0_header):
-                        have_EDMV = False
+                        #print("WARNING:have_EDMV = False")
+                        # Maybe only in the zero report
+                        have_EDMV = True # False in prior zero reports
+                        have_RSCst = False
                         cand_start_col = 6
                     else:
                         raise FormatError(f"sov column header mismatch {linenum}:{cols}")
@@ -963,6 +1077,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                             total_col = i
                             continue
                         else:
+                            is_writein_candidate = False
                             last_cand_col = i
                             if name.endswith(writeincand_suffix):
                                 is_writein_candidate = True
@@ -970,15 +1085,17 @@ with ZipFile("resultdata-raw.zip") as rzip:
                                 if i+1 == ncols:
                                     expected_cols = i+2
                                 #continue
+                            name = re.sub(r'␤\(\w+\)$','',name)
                             cand_order += 1
                             candidx.append(i)
                             candidate_order = len(candidx)
+                            candidate_order_str = str(candidate_order).zfill(2)
                             candidate_full_name = name
                             candnames.append(name)
                             candidate_party_id = ""
-                            is_writein_candidate = False
                             if name not in candbyname:
-                                print(f"Can't match {name} in {contest_id}:{contest_name}");
+                                if haveCVRExport:
+                                    print(f"Can't match {name} in {contest_id}:{contest_name}");
                                 cand_id = f'{contest_id}{candidate_order:02}'
                                 candidate_type = ""
                                 if is_writein_candidate:
@@ -990,13 +1107,13 @@ with ZipFile("resultdata-raw.zip") as rzip:
                                 cand_id = candidate.Id
                                 candidate_type = candidate.Type
                                 is_writein_candidate = re.search(
-                                    r'Writein', candidate_type, flags=re.I) != None
+                                    r'Write ?in', candidate_type, flags=re.I) != None
 
                             candheadings.append(f'{cand_id}:{name}')
                             candids.append(cand_id)
 
                             candline = jointsvline(contest_id,
-                                            candidate_order, cand_id,
+                                            candidate_order_str, cand_id,
                                             candidate_type,
                                             candidate_full_name,
                                             candidate_party_id,
@@ -1031,6 +1148,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                 # Column of data
                 if skip_area_pat.match(cols[0]) and not readDictrict:
                     # Superflous totals
+                    #if args.debug: print(f"Skip {linenum}:{line}")
                     skip_area = True
                     continue
 
@@ -1043,12 +1161,14 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     isvbm_precinct = False
                     subtotal_col = 0
                     skip_area = False
+                    #if args.debug: print(f"ALLPCTS at {linenum}")
                     continue
-                elif cols[0] == "San Francisco - Total":
+                elif re.match(r'^(San Francisco|Electionwide) - Total',cols[0]):
                     area_id = "ALLPCTS"
                     isvbm_precinct = False
                     subtotal_col = -1
                     skip_area = True
+                    #if args.debug: print(f"ALLPCTS at {linenum}:{line}")
 
                 elif next_is_district:
                     # This should be a district heading
@@ -1078,7 +1198,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     precinct_name = precinct_name_orig = cols[0]
                     pctname2areaid[precinct_name_orig] = area_id
                     # Clean the name
-                    precinct_name = re.sub(r'^PCT','Precinct',precinct_name)
+                    precinct_name = re.sub(r'^PCT','Precinct',precinct_name,flags=re.I)
                     pctlist.append(precinct_id)
                     if precinct_id2:
                         pctlist.append(precinct_id2)
@@ -1103,7 +1223,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                 else:
                     pct_col_0 = False
 
-                #if readDictrict:
+                #if args.debug:
                     #print(f"cols={cols}")
 
                 if readDictrict and cols[0].endswith(" - Total"):
@@ -1112,6 +1232,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
 
                 if (expected_cols != ncols and
                     last_cand_col+1 != ncols):
+                    print(f"pct_col_0={pct_col_0} have_EDMV={have_EDMV} area_id={area_id} precinct_name={precinct_name} readDictrict={readDictrict}")
                     raise FormatError(f"Mismatched Column count {ncols}!={expected_cols}:{last_cand_col} {linenum}:{line}")
 
                 if args.zero:
@@ -1127,7 +1248,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     RSRej = 0 # Not available
                     if RSTrn == "N/A":
                         RSTrn = "0.0";
-                elif not have_EDMV:
+                elif not have_RSCst:
                     (RSReg, RSUnd, RSOvr) = [int(float(cols[i])) for i in [1,2,4]]
                     total_votes = RSTot = int(float(cols[total_col]))
                     RSCst = total_ballots = int(RSOvr)+int((int(RSTot)+int(RSUnd))/vote_for)
@@ -1141,12 +1262,13 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     # RSRej not available
                     RSExh = 0
 
-                no_voter_precinct = RSReg==0 and not args.withzero
+                no_voter_precinct = RSReg==0 and not (args.withzero or zero_report)
 
                 if pct_col_0:
                     pass
                 elif not subtotal_name_pat.match(cols[0]):
                     # Unmatched Area
+                    print(f"skip_area={skip_area} area_id={area_id} readDictrict={readDictrict}")
                     raise FormatError(f"sov area mismatch {linenum}: {line}")
                 elif skip_area:
                     continue
@@ -1199,6 +1321,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     continue
                 if in_turnout:
                     stats = [area_id, subtotal_type, RSReg, RSCst]
+                    RSRegSave[subtotal_type][area_id] = RSReg
                     outline = jointsvline(*stats)
                     if area_id.startswith("PCT") and (
                         subtotal_col <0 or
@@ -1322,6 +1445,9 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     cand_start_col = len(stats)
                     stats.extend([int(float(cols[i])) for i in candidx])
 
+                    if card:
+                        CardTurnOut[card][subtotal_type][area_id] = RSCst
+
                     if area_id.startswith("PCT") and (
                         subtotal_col <0 or
                         subtotal_type == ('MV' if isvbm_precinct else 'ED')):
@@ -1331,17 +1457,19 @@ with ZipFile("resultdata-raw.zip") as rzip:
 
                 outline = jointsvline(*stats)
                 if area_id == "ALLPCTS":
-                    if grand_totals_wrong :
-                        # Some MB precincts have missing ED registration
-                        grand_total['ED'][2] = grand_total['MV'][2]
-                        contest_totallines.append(jointsvline(*grand_total['ED']))
-                        contest_totallines.append(jointsvline(*grand_total['MV']))
-                        outline2 = jointsvline(*grand_total['TO'])
-                        if outline != outline2:
-                            print(f"grand_total discrepancy for {contest_id} \n   {outline}\n   {outline2}")
+                    if args.debug:
+                        print(f"ALLPCTS:{subtotal_type} at {linenum}")
 
                     if subtotal_type == 'TO':
                         # Put grand totals first
+                        if grand_totals_wrong :
+                            # Some MB precincts have missing ED registration
+                            grand_total['ED'][2] = grand_total['MV'][2]
+                            contest_totallines.append(jointsvline(*grand_total['ED']))
+                            contest_totallines.append(jointsvline(*grand_total['MV']))
+                            outline2 = jointsvline(*grand_total['TO'])
+                            if outline != outline2:
+                                print(f"grand_total discrepancy for {contest_id} \n   {outline}\n   {outline2}")
 
                         contest_totallines.insert(0, outline)
 
@@ -1527,6 +1655,26 @@ with ZipFile("resultdata-raw.zip") as rzip:
             putfilea("pctturnout.tsv",
                     "area_id|registration|total_ballots|ed_ballots|mv_ballots",
                     pctturnout)
+            # Compute per-card turnout
+            # TODO
+            #for area_id,RSReg  in RSRegSave['TO'].items():
+                #VBM_turnout = int(
+                #for subtotal_type, ewmfield in [('ED','Polls'),
+                                                 #('MV','VBM'),
+                                                 #('TO','Total']:
+                    #if area_id not in RSRegSave[subtotal_type]: continue
+                    #CardsCast = [int(CardTurnOut[i][subtotal_type].get(area_id,0))
+                                 #for i in CardTurnOut]
+                    #RSCst = max(CardsCast)
+                    #RSVot = (EWM_turnout['Grand Total:'].get(ewmfield,'')
+                             #if area_id == 'ALLPCTS' else
+                             #EWM_turnout[area_id[3:].get(ewmfield,'')
+                             #if area_id.startswith('PCT') else ''
+
+                    #RSUnc = int(RSVot) - int(RSCst)
+                    #if subtotal_type==
+
+
         else:
             # Put the json contest status
             #results_json['input_file_sha']=infile_sha

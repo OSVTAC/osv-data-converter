@@ -18,6 +18,7 @@ import re
 import argparse
 import xlrd
 import datetime
+from math import floor
 from typing import Dict, Tuple, List, TextIO, Union, Pattern
 from tsvio import TSVReader, TSVWriter, DuplicateError, map_psv_data, map_tsv_data
 
@@ -84,6 +85,9 @@ def format_value(cell):
             return dt.date().isoformat()
         else:
             return dt.isoformat(sep=' ')
+    if cell.ctype==xlrd.XL_CELL_NUMBER:
+        if cell.value==floor(cell.value):
+            return(str(int(cell.value)))
     return str(cell.value)
 
 

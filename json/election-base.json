@@ -1,12 +1,82 @@
 {
-"result_stat_types": [
+    "party_names": [
+        {
+            "_id": "AI",
+            "heading": "American Independent"
+        },
+        {
+            "_id": "DEM",
+            "heading": "Democratic"
+        },
+        {
+            "_id": "GRN",
+            "heading": "Green"
+        },
+        {
+            "_id": "LIB",
+            "heading": "Libertarian"
+        },
+        {
+            "_id": "PF",
+            "heading": "Peace & Freedom"
+        },
+        {
+            "_id": "REP",
+            "heading": "Republican"
+        },
+        {
+            "_id": "NPP",
+            "heading": "No Party Preference"
+        }
+    ],
+    "result_stat_types": [
         {
             "_id": "RSTot",
             "heading": "Ballots Counted"
         },
         {
+            "_id": "RSVot",
+            "heading": "Voters Participating"
+        },
+        {
             "_id": "RSCst",
             "heading": "Ballots Cast"
+        },
+        {
+            "_id": "RSCd1",
+            "heading": "Card 1 Ballots Cast"
+        },
+        {
+            "_id": "RSCdd2",
+            "heading": "Card 2 Ballots Cast"
+        },
+        {
+            "_id": "RSCd3",
+            "heading": "Card 3 Ballots Cast"
+        },
+        {
+            "_id": "RSCd4",
+            "heading": "Card 4 Ballots Cast"
+        },
+        {
+            "_id": "RSCd5",
+            "heading": "Card 5 Ballots Cast"
+        },
+        {
+            "_id": "RSCd6",
+            "heading": "Card 6 Ballots Cast"
+        },
+        {
+            "_id": "RSCd7",
+            "heading": "Card 7 Ballots Cast"
+        },
+        {
+            "_id": "RSCd8",
+            "heading": "Card 8 Ballots Cast"
+        },
+        {
+            "_id": "RSCd9",
+            "heading": "Card 9 Ballots Cast"
         },
         {
             "_id": "RSReg",

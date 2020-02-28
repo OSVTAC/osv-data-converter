@@ -15,7 +15,10 @@ import json
 import os
 import os.path
 import re
+import time
 import urllib.request
+
+from omniutil import(form_bt_suffix)
 
 DESCRIPTION = """\
 Fetch election definition data from omniballot sample ballots. Files
@@ -140,14 +143,10 @@ os.makedirs("bt", exist_ok=True)
 
 for sid, s in j['styles'].items():
     print(f'Fetching Style {sid} for bt {s["code"]}/{s["name"]}')
-    m = re.match(r'^(?:Poll BT )?(\d+)$', s["name"])
-    if m:
-        bt = m.group(1)
-    else:
-        bt = s["code"]
-    bt = bt.zfill(3)
     # See sample above, the styles.[].json_uri has the URL to fetch.
-    j = getjsonfile(s['json_uri'], f'bt/bt{bt}.json')
+    btsuf = form_bt_suffix(s)
+    j = getjsonfile(s['json_uri'], f'bt/bt{btsuf}.json')
+    time.sleep(1)
     #
     #put_json_file(j['boxes'], f'bt/btb{s["code"].zfill(3)}.json')
     #j = getjsonfile(GETBT_PREFIX+s['json_uri'],

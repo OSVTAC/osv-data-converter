@@ -24,7 +24,7 @@ DESCRIPTION = """\
 Fetch a set of sample ballot PDFs for each ballot type based on a pattern.
 """
 
-URL_FORMAT = "https://www.sfelections.org/sample_ballots/{}/BT_{}_S.pdf"
+URL_FORMAT = "https://www.sfelections.org/sample_ballots/{}/BT_{}_{}.pdf"
 
 def parse_args():
     """
@@ -81,7 +81,8 @@ args = parse_args()
 m = re.search(r'/(20\d\d)-(\d\d)-\d\d/',os.getcwd())
 date = f"{m[1]}_{m[2]}"
 
-for i in range(args.endbt):
-    bt = str(i+1).zfill(2)
-    url = URL_FORMAT.format(date,bt)
-    getfile(url, f"BT_{bt}_S.pdf")
+for L in "S C F".split():  # Also K V
+    for i in range(args.endbt):
+        bt = str(i+1).zfill(2)
+        url = URL_FORMAT.format(date,bt,L)
+        getfile(url, f"BT_{bt}_{L}.pdf")

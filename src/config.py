@@ -27,9 +27,10 @@ Routines to load configuration files.
 import logging
 import yaml
 import re
+import collections
 
 from collections import namedtuple
-from typing import List, Pattern, Match, Dict, NewType, Tuple, Any, NamedTuple
+from typing import List, Pattern, Match, Dict, NewType, Tuple, Any, NamedTuple, Set
 
 DEFAULT_CONFIG_FILE_NAME = "config.yaml"
 
@@ -206,6 +207,14 @@ def config_strlist_dict(d:Dict[str,List[str]])->Dict[str,List[str]]:
 
     return d
 
+def config_idlist(v:str,        # Attribute value string
+                 )->List[str]:  # Returned string set
+    """
+    Converts a string attribute value that is a space separated list of
+    strings.
+    """
+    return str(v).split()
+
 
 def eval_config_pattern(v:str,                  # Value to test
                         patlist:List[Pattern]   # List of patterns to try
@@ -264,7 +273,7 @@ def validate_attr(v:Any,         # Value to test
     """
     if v == None or not validate: return v, False     # Return None as-is
 
-    if validate in argtypeconv:
+    if isinstance(validate, collections.Hashable) and validate in argtypeconv:
         # Convert to string or other type
         validate = argtypeconv[validate]
 

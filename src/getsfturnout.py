@@ -14,6 +14,7 @@ import re
 import urllib.request
 import argparse
 from shutil import copyfileobj
+from lxml import html
 
 DESCRIPTION = """\
 Fetch election turnout data from sfgov.org Election Results - Turnout.
@@ -30,9 +31,10 @@ VBM_SUMMARY_URL = "https://sfelections.org/tools/election_data/output.php?data=1
 VBM_PRECINCT_URL = "https://sfelections.org/tools/election_data/data/2018-11-06/ED_VBM_PCT.csv"
 VBM_CHALLENGES_URL = "https://sfelections.org/tools/election_data/vbm_challenge_0.php?E=2018-11-06"
 VC_TURNOUT_URL = "https://sfelections.org/tools/election_data/vc.php?E=2018-11-06"
+REG_STAT_URL = "https://www.sfelections.org/tools/election_data/"
 
 # To substitute the desired date in the URL pattern
-url_date_re = re.compile('2019-11-05')
+url_date_re = re.compile('2018-11-06')
 
 
 def parse_args():
@@ -41,6 +43,10 @@ def parse_args():
     """
     parser = argparse.ArgumentParser(description=DESCRIPTION,
                     formatter_class=argparse.RawDescriptionHelpFormatter)
+
+    # Get default election date from cwd
+    m = re.search(r'/(20\d\d-\d\d-\d\d)/', os.getcwd())
+    default_date = m.group(1) if m else None
 
     parser.add_argument('--version', action='version', version='%(prog)s '+VERSION)
     parser.add_argument('-v', '--verbose', action='store_true',
@@ -53,8 +59,8 @@ def parse_args():
                         help='save error response html with .err suffix')
     parser.add_argument('-p', dest='pipe', action='store_true',
                         help='use pipe separator else tab')
-    parser.add_argument('date', help='yyyy-mm-dd election date',
-                        )
+    parser.add_argument('date', help='yyyy-mm-dd election date', nargs='?',
+                        default=default_date)
 
     args = parser.parse_args()
 
@@ -107,7 +113,8 @@ filemap = {
     "vbmsummary.csv": VBM_SUMMARY_URL,      # VBM ballots by party for each day
     "vbmprecinct.csv": VBM_PRECINCT_URL,    # VBM ballots by party for each precinct
     "vbmchallenges.html": VBM_CHALLENGES_URL,   #
-    "vcturnout.html": VC_TURNOUT_URL
+    "vcturnout.html": VC_TURNOUT_URL,
+    "regstat.html":REG_STAT_URL,
     }
 
 for filename, url in filemap.items():
@@ -136,3 +143,21 @@ def extract_table(infile):
 # Convert html to tsv
 extract_table("turnoutdata-raw/vbmchallenges.html")
 extract_table("turnoutdata-raw/vcturnout.html")
+
+# parse complex registration stats
+doc = html.parse("turnoutdata-raw/regstat.html")
+tabs = doc.xpath('//div[@class="tab-pane"]|//div[@class="tab-pane active"]')
+line = 0
+with open("turnoutdata-raw/regstat.tsv",'w') as f:
+    for tab in tabs:
+        Id = tab.get('id')
+        rows = tab.cssselect('table tr')
+        #print(f"id={Id} rows={len(rows)}")
+        data = [
+                [td.text_content().strip() for td in row.cssselect('td') ]
+                for row in rows]
+        if not line:
+            print("Area"+separator+separator.join([td[0] for td in data if td]),file=f)
+        print(Id+separator+separator.join([td[1] for td in data if td]),file=f)
+        line += 1
+

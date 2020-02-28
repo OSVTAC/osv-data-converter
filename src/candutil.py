@@ -374,6 +374,7 @@ f"Mismatch candidate map2 for {cand_id} -> {self.cont_map2.get(cand_id2,'<NO-NAM
 
                     if len(l) == 1:
                         # Only one mapping remaining
+                        import pdb; pdb.set_trace()
                         found_contest = l.keys()[0]
                     elif majority_search:
                         # Look for one mapping with >1 and >others in count

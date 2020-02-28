@@ -42,6 +42,7 @@ TSV writing capability will be added later.
 """
 
 import re
+import io
 from typing import Dict, Tuple, List, TextIO, Union
 from collections import OrderedDict
 import logging
@@ -142,8 +143,9 @@ class TSVReader:
         self.validate_header = validate_header
 
     def __enter__(self):
-        self.f = self.opener.open(self.path) if self.opener else open(
-            self.path, encoding=self.encoding)
+        self.f = (self.opener.open(self.path) if self.opener else
+                  self.path if isinstance(self.path, io.IOBase)
+                  else open(self.path, encoding=self.encoding))
         if self.read_header:
             # The first line is a header with field names and column count
             line = self.f.readline()

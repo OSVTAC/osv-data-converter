@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Copyright (C) 2018  Carl Hage
+# Copyright (C) 2018-2020  Carl Hage
 #
 # This file is part of Open Source Voting Data Converter (ODC).
 #
@@ -36,6 +36,8 @@ import re
 import html
 
 import nameutil
+
+from omniutil import(form_bt_suffix)
 
 from config import (Config, config_pattern_list, eval_config_pattern,
                     config_strlist_dict, InvalidConfig, config_str_dict,
@@ -109,6 +111,7 @@ CONFIG_FILE = "config-omni.yaml"
 config_attrs = {
     "trim_sequence_prefix": str,            # prefix to chop
     "retention_pats": config_pattern_list,  # Match retention candidate names
+    "contest_party_pats": config_pattern_list,  # Match contests with party
     "bt_digits": int,
     "contest_map_file": str,
     "candidate_map_file": str,
@@ -478,8 +481,7 @@ def conv_titles(titles):
     """
     Extract the titles, and convert to a list of hash values with translations
     """
-
-    return [form_i18n_str(t) for t in titles ]
+    return [form_i18n_str(t) for t in titles if t.get('value',"")!=""]
 
 def merge_titles(titles:List[Dict])->str:
     """
@@ -504,6 +506,11 @@ def extract_titles(paragraphs:List[Dict])->List[Dict]:
     """
     titles = []
 
+
+    for p in paragraphs:
+        if p['en'].count("<strong") > 1:
+            return [{'en':''}]
+
     for p in paragraphs:
         istr = {}
         for lang in p.keys():
@@ -512,7 +519,7 @@ def extract_titles(paragraphs:List[Dict])->List[Dict]:
                 # Save the extracted title
                 istr[lang] = m.group(1)
                 return ''
-            p[lang] = re.sub(r'^<strong>(.*?)</strong><br ?/?>',
+            p[lang] = re.sub(r'^(?:<p\b[^<>]*>)?\s*<strong>\s*(.*?)\s*</strong>\s*(?:</p>|<br \s*/?>)',
                                 append_sub, p[lang], count=1)
         if istr:
             titles.append(istr)
@@ -529,24 +536,30 @@ def conv_bt_json(j:Dict, bt:str):
     lastheader = ""
 
     election_title = form_i18n_str(j['election']['title'])
+    election_title_en = election_title['en']
     # In 2019 the admin_title has the date, before the date was a prefix on election_title
     election_admin_title = j['election'].get('admin_title',"")
     m = re.match(r'(\d{4}-\d\d-\d\d) ',election_admin_title)
+    if not m:
+        m = re.match(r'(\d{4}-\d\d-\d\d) ',election_title_en)
     if m:
         # 2019 format where the date prefix is in admin_title only
         date_prefix = m.group(1)
     else:
-        date_prefix = election_title['en'][:11]
-        # Trim election date prefix
-        for lang in election_title.keys():
-            if not election_title[lang].startswith(date_prefix):
-                raise FormatError(f"Inconsistent election date prefix {election_title[0][lang]}")
-            election_title[lang] = election_title[lang][11:]
-        date_prefix = date_prefix[:-1]
+        election_title_en = re.sub(r'(\d+)(st|nd|rd|th), (20\d\d)',r'\1, \3',election_title_en)
+        m = re.match(r'^(.*?)[ - ,]+((:?January|February|March|April|May|June|July|August|September|October|November|December) +(\d+), +(20\d\d))\b',
+                  election_title_en)
+        if m:
+            # 2020 format, month day, year format
+            date_prefix=datetime.strptime(m.group(2),"%B %d, %Y").strftime('%Y-%m-%d')
+            election_title = m.group(1)
+        else:
+            raise FormatError(f"Unmatched election date in '{election_title_en}' admin={election_admin_title}")
+
 
     if election_date:
         if date_prefix != election_date:
-            FormatError(f"Inconsistent election date")
+            raise FormatError(f"Inconsistent election date {election_title} admin={election_admin_title}")
     else:
         election_date = date_prefix
         ballot_title = election_title
@@ -566,11 +579,12 @@ def conv_bt_json(j:Dict, bt:str):
         contest_type = box['type']
         titles = conv_titles(box['titles'])
         paragraphs = conv_titles(box['text'])
-        clean_paragraphs(paragraphs)
 
-        if not titles:
+        if not titles or not len(titles):
             # Titles can be in <strong> header prefix
             titles = extract_titles(paragraphs)
+
+        clean_paragraphs(paragraphs)
 
         # Save title and text for RCV, ignore choices after first
         if lastrcvtitle:
@@ -587,8 +601,8 @@ def conv_bt_json(j:Dict, bt:str):
             lastrcvtitle = titles
             lastrcvtext = paragraphs
             continue
-        elif (re.match(r'\d+-\d$',external_id) or
-              re.match(r'\d+(st|nd|rd|th) Choice',titles[0].get('en',""))):
+        elif (re.match(r'\d+-\d$',external_id) or (titles and len(titles)>0 and
+              re.match(r'\d+(st|nd|rd|th) Choice',titles[0].get('en',"")))):
             # 2nd, 3rd RCV choices
             continue
         else:
@@ -628,7 +642,7 @@ def conv_bt_json(j:Dict, bt:str):
         title = merge_titles(titles)
         text = merge_titles(paragraphs)
 
-        if title=='':
+        if title=='' and len(text)<20:
             print(f"Strange title: {contest_id}|{sequence}|{paragraphs}")
 
 
@@ -762,8 +776,19 @@ def conv_bt_json(j:Dict, bt:str):
         else:
             contest_candidate = ""
 
+        m = eval_config_pattern(title, config.contest_party_pats)
+        if (m and
+            "options" in box and
+            "parties" in box["options"][0]):
+            party_rec = box["options"][0]["parties"][0]
+            contest_party_id = party_rec.get('external_id',"")
+            if not found:
+                contj['contest_party_id'] = contest_party_id
+        else:
+            contest_party_id = ''
+
         l = jointsvline(sequence,contest_type,contest_id,external_id,vote_for,title,text,
-                        approval_required)
+                        approval_required,contest_party_id)
         if found:
             if l != foundContest[contest_id]:
                 raise FormatError(f"Mismatched contest:\n  {l}  {foundContest[contest_id]}")
@@ -802,18 +827,20 @@ def conv_bt_json(j:Dict, bt:str):
                     if len(cand_names)>1:
                         party_istr = cand_names.pop()
                         party = party_istr['en']
-                    elif designation.startswith('Party Preference:'):
+                    if designation.startswith('Party Preference:'):
+                        tmp_des = party
+                        tmp_des_istr = party_istr
                         party_istr = designation_istr
                         party = designation
-                        designation = ""
-                        designation_istr = None
+                        designation = tmp_des
+                        designation_istr = tmp_des_istr
                 if len(cand_names)!=1:
                     raise FormatError("Strange candidate {cand_id} in {contest_id}:{title}")
 
                 cand_name = cand_names[0]['en']
                 party = re.sub(r'^Party Preference:\s*','', party)
 
-                if cand_seq <= lastseq:
+                if int(cand_seq) <= int(lastseq):
                     raise FormatError(
         f"Out of sequence {contest_id}:{cand_id}:{cand_name} {lastseq}..{cand_seq}")
                 cand_type = o['type']
@@ -1098,17 +1125,9 @@ except:
 os.makedirs("bt", exist_ok=True)
 
 for sid, s in lookups['styles'].items():
-    m = re.match(r'^(?:Poll BT )?(\d+)$', s["name"])
-    if m:
-        bt = m.group(1)
-    else:
-        bt = s["code"]
-    if bt == 'composite':
-        continue
-    bt = bt.zfill(config.bt_digits)
-
-    print(f'Reading Style {sid} for bt {s["code"]}/{s["name"]}')
-    with open(f"bt/bt{bt}.json") as f:
+    bt = form_bt_suffix(s)
+    print(f'Reading Style {sid} for bt {bt} ({s["code"]}/{s["name"]})')
+    with open(f'bt/bt{bt}.json') as f:
         j = json.load(f)
         conv_bt_json(j, bt)
 
@@ -1135,7 +1154,7 @@ putfile("controt-omni.tsv",
 # Write out the collected TSV data
 
 putfile("contlist-omni.tsv",
-        "sequence|type|contest_id|external_id|vote_for|title|text|approval_required",
+        "sequence|type|contest_id|external_id|vote_for|title|text|approval_required|contest_party_id",
         contestlines)
 
 putfile("candlist-omni.tsv",
@@ -1169,7 +1188,7 @@ for path in ["../ems/pctcons.tsv","../resultdata/pctcons-sov.tsv"]:
     if os.path.isfile(path):
         pctconsfile = path
 if not pctconsfile:
-    print("Missing ../ems/pctcons.tsv")
+    print("Missing ../ems/pctcons.tsv or ../resultdata/pctcons-sov.tsv")
 else:
     with TSVReader(path) as r:
         if r.headerline != "cons_precinct_id|cons_precinct_name|is_vbm|no_voters"\

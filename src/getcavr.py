@@ -90,6 +90,8 @@ args = parse_args()
 
 xls2tsv_opts = " -p" if args.pipe else ""
 
+subdir = ''
+
 content = urllib.request.urlopen(REG_INDEX_URL)
 for lineb in content:
     line = lineb.decode('utf-8')
@@ -97,8 +99,15 @@ for lineb in content:
     m =re.search(r'.*href="/elections/report-registration/([^"<>]+)/"',  line)
     if m:
         subdir = m.group(1)
+        # Discrepancy in file naming
+        subdir = re.sub(r'-(\d\d)$',r'-20\1', subdir)
         if args.verbose:
             print(f"Subdir:{subdir}")
 
-for filename in ['county.xlsx']:
-    getfile(f"https://elections.cdn.sos.ca.gov/ror/{subdir}/county.xlsx", filename)
+if not subdir:
+    print(f"Unmatched report directory in {REG_INDEX_URL}")
+    exit(1)
+# https://elections.cdn.sos.ca.gov/ror/60day-presprim-2020/county.xlsx
+# https://elections.cdn.sos.ca.gov/ror/60day-presprim-2020/politicalsub.xlsx
+for filename in ['county.xlsx','politicalsub.xlsx']:
+    getfile(f"https://elections.cdn.sos.ca.gov/ror/{subdir}/{filename}", filename)

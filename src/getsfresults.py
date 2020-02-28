@@ -57,6 +57,8 @@ def parse_args():
                         help='use pipe separator else tab')
     parser.add_argument('-X', dest='noxml', action='store_true',
                         help='exclude xml format')
+    parser.add_argument('-V', dest='nocvr', action='store_true',
+                        help='exclude CVR json format')
     parser.add_argument('url', help='URL of the detailed reports index page',
                         nargs='?', default=DEFAULT_URL)
 
@@ -129,7 +131,8 @@ def processfile(url, subdir, filename):
     urlfile.write(f'{url}\t{filename}\n')
 
     if re.match(r'^CVR_Export_\w+\.zip',filename):
-        getfile(url,"CVR_Export.zip")
+        if not args.nocvr:
+            getfile(url,"CVR_Export.zip")
     else:
         getfile(url,"resultdata-raw/"+filename)
     # break; # for debug
