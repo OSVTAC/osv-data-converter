@@ -58,12 +58,17 @@ class Translator:
         """
 
         self.translations_by_en = {} # Translation for an English phrase
-        self.translation_key_by_en = {} # Key found
+        self.translation_key_by_en = {} # Key (phrase_id) found
         self.translation_collisions = set() # English phrase with multiple translations
         # If multiple translations are present, then the self.translations_by_en
         # and self.translation_key_by_en is converted to a list.
 
-        # Translations with {0} {1} etc are mapped
+        # The *_by_en dicts use lower case keys formed with form_translate_key()
+
+        # Translations with {0} {1} etc are mapped to a list with
+        # triple ((key, pat, format) with the translation key/phrase_id,
+        # a compiled regex with groups matching {0}, ...
+        # TODO: Oops, if English is out of order, convert to key
         self.translation_pats = [] # (key, pat, format) for substitutions
 
         #print(f"reading {filename}")
@@ -118,17 +123,27 @@ class Translator:
                     parampat.append(rfound)
                 # Map the english
                 # First convert special characters as-is
-                en = re.sub(r'([^\w\{\}\- ])',r'\\\1',en)
+                patstr = re.sub(r'([^\w\{\}\- ])',r'\\\1',en)
                 # TODO: We could also make matches independent of spaces, etc.
                 #print(f"Regex for {key}={en} parampats={parampat}")
                 try:
+                    # Check the English for {0}...{len(params)-1}
+                    i = 0
+                    subs = re.findall(r'\{(\d+)\}',en)
+                    for v in subs:
+                        if int(v)!=i:
+                            raise Exception("Invalid sequence for {key}:{en}")
+                        i = i+1
+                    if i!=len(parampat):
+                        raise Exception("Invalid sequence for {key}:{en}")
+
                     # Convert {\d+} to parameter regex
-                    en = re.sub(r'\{(\d+)\}',
+                    patstr = re.sub(r'\{(\d+)\}',
                                 lambda m:(r'('+parampat[int(m.group(1))]+')'),en)
-                    pat = re.compile(f'^{en}$', flags=re.I)
+                    pat = re.compile(f'^{patstr}$', flags=re.I)
                 except:
                     # TODO: Handle this better
-                    print(f"Invalid translation {key}")
+                    print(f"Invalid translation {key} en:{en}")
                     continue
 
                 #print(f"Translation pat for {key} = {en} :{istr}")
