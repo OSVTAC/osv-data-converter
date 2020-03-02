@@ -1162,6 +1162,7 @@ for wiformat in range(0,len(writeinfiles)):
                 "ballot_title": str2istr(Description),
                 'is_writein': True
                 })
+    break
 
 if writein_candlines:
     putfile("candlist-writein.tsv",
