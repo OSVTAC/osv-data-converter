@@ -19,6 +19,7 @@
 Update json/election-base.json
 """
 
+import functools
 import json
 from pathlib import Path
 import sys
@@ -72,26 +73,51 @@ def write_json(data, path):
         json.dump(data, f, sort_keys=True, indent=4, ensure_ascii=False)
 
 
-def update_party(party, phrases_data):
-    party_id = party['_id']
-    heading = party['heading']
+def update_item(phrases_data, item_data, get_phrase_id, phrase_key):
+    """
+    Args:
+      data: the item data, as a dict.
+      get_phrase_id: a function with signature `get_phrase_id(id_)` that
+        can raise KeyError.
+    """
+    item_id = item_data['_id']
+    heading = item_data['heading']
 
     # This is the key in translations.json.
-    phrase_id = f'party_{party_id}'
-
     try:
-        phrase = phrases_data[phrase_id]
+        phrase_id = get_phrase_id(item_id)
     except KeyError:
-        log(f'WARNING: phrase {phrase_id!r} missing from: {TRANSLATIONS_JSON_PATH}')
+        log(f'WARNING: no phrase id for item id: {item_id!r}')
+        phrase_id = None
+        phrase = None
+
+    if phrase_id is not None:
+        try:
+            phrase = phrases_data[phrase_id]
+        except KeyError:
+            log(f'WARNING: phrase {phrase_id!r} missing from: {TRANSLATIONS_JSON_PATH}')
+            phrase = None
+        else:
+            # Remove keys with empty values.
+            phrase = {key: value for key, value in phrase.items() if value}
+
+    if phrase is None:
         phrase = {LANG_CODE_EN: heading}
 
-    party['name'] = phrase
+    item_data[phrase_key] = phrase
 
 
-def update_parties(base_data, phrases_data):
-    parties = base_data['party_names']
-    for party in parties:
-        update_party(party, phrases_data)
+def update_base_value(base_data, phrases_data, base_key, update_func):
+    """
+    Update one of the values in the election-base.json data.
+
+    Args:
+      update_func: a function with signature: `update(phrases_data, item_data)`.
+      base_key: the key in election-base.json.
+    """
+    seq = base_data[base_key]
+    for item_data in seq:
+        update_func(phrases_data, item_data=item_data)
 
 
 def main():
@@ -99,7 +125,26 @@ def main():
     translations_data = utils.read_json(TRANSLATIONS_JSON_PATH)
     phrases_data = translations_data['translations']
 
-    update_parties(base_data, phrases_data)
+    get_party_phrase_id = lambda party_id: f'party_{party_id}'
+    update_party = functools.partial(update_item, get_phrase_id=get_party_phrase_id,
+        phrase_key='name')
+
+    get_result_stat_phrase_id = lambda id_: RESULT_STAT_TO_PHRASE_ID[id_]
+    update_result_stat_type = functools.partial(update_item, get_phrase_id=get_result_stat_phrase_id,
+        phrase_key='text')
+
+    get_voting_group_phrase_id = lambda id_: VOTING_GROUP_TO_PHRASE_ID[id_]
+    update_voting_group = functools.partial(update_item, get_phrase_id=get_voting_group_phrase_id,
+        phrase_key='text')
+
+    update_info = [
+        ('party_names', update_party),
+        ('result_stat_types', update_result_stat_type),
+        ('voting_groups', update_voting_group),
+    ]
+    for base_key, update_func in update_info:
+        update_base_value(base_data, phrases_data, base_key=base_key,
+            update_func=update_func)
 
     write_json(base_data, ELECTION_BASE_PATH)
 

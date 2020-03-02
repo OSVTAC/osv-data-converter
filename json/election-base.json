@@ -71,92 +71,180 @@
     "result_stat_types": [
         {
             "_id": "RSTot",
-            "heading": "Ballots Counted"
+            "heading": "Ballots Counted",
+            "text": {
+                "_desc": "RSTot",
+                "en": "Ballots Counted"
+            }
         },
         {
             "_id": "RSVot",
-            "heading": "Voters Participating"
+            "heading": "Voters Participating",
+            "text": {
+                "_desc": "RSVot",
+                "en": "Voters Participating"
+            }
         },
         {
             "_id": "RSCst",
-            "heading": "Ballots Cast"
+            "heading": "Ballots Cast",
+            "text": {
+                "_desc": "RSCst",
+                "en": "Ballots Cast",
+                "es": "Votos",
+                "tl": "Mga Inihulog na Balota",
+                "zh": "投票"
+            }
         },
         {
             "_id": "RSCd1",
-            "heading": "Card 1 Ballots Cast"
+            "heading": "Card 1 Ballots Cast",
+            "text": {
+                "en": "Card 1 Ballots Cast"
+            }
         },
         {
             "_id": "RSCdd2",
-            "heading": "Card 2 Ballots Cast"
+            "heading": "Card 2 Ballots Cast",
+            "text": {
+                "en": "Card 2 Ballots Cast"
+            }
         },
         {
             "_id": "RSCd3",
-            "heading": "Card 3 Ballots Cast"
+            "heading": "Card 3 Ballots Cast",
+            "text": {
+                "en": "Card 3 Ballots Cast"
+            }
         },
         {
             "_id": "RSCd4",
-            "heading": "Card 4 Ballots Cast"
+            "heading": "Card 4 Ballots Cast",
+            "text": {
+                "en": "Card 4 Ballots Cast"
+            }
         },
         {
             "_id": "RSCd5",
-            "heading": "Card 5 Ballots Cast"
+            "heading": "Card 5 Ballots Cast",
+            "text": {
+                "en": "Card 5 Ballots Cast"
+            }
         },
         {
             "_id": "RSCd6",
-            "heading": "Card 6 Ballots Cast"
+            "heading": "Card 6 Ballots Cast",
+            "text": {
+                "en": "Card 6 Ballots Cast"
+            }
         },
         {
             "_id": "RSCd7",
-            "heading": "Card 7 Ballots Cast"
+            "heading": "Card 7 Ballots Cast",
+            "text": {
+                "en": "Card 7 Ballots Cast"
+            }
         },
         {
             "_id": "RSCd8",
-            "heading": "Card 8 Ballots Cast"
+            "heading": "Card 8 Ballots Cast",
+            "text": {
+                "en": "Card 8 Ballots Cast"
+            }
         },
         {
             "_id": "RSCd9",
-            "heading": "Card 9 Ballots Cast"
+            "heading": "Card 9 Ballots Cast",
+            "text": {
+                "en": "Card 9 Ballots Cast"
+            }
         },
         {
             "_id": "RSReg",
-            "heading": "Registered Voters"
+            "heading": "Registered Voters",
+            "text": {
+                "_desc": "RSReg",
+                "en": "Registered Voters"
+            }
         },
         {
             "_id": "RSEli",
-            "heading": "Eligible Voters"
+            "heading": "Eligible Voters",
+            "text": {
+                "_desc": "RSEli",
+                "en": "Eligible Voters"
+            }
         },
         {
             "_id": "RSTrn",
             "heading": "Voter Turnout",
-            "is_percent": true
+            "is_percent": true,
+            "text": {
+                "_desc": "RSTrn",
+                "en": "Voter Turnout"
+            }
         },
         {
             "_id": "RSRej",
-            "heading": "Ballots Rejected"
+            "heading": "Ballots Rejected",
+            "text": {
+                "_desc": "RSRej",
+                "en": "Ballots Rejected"
+            }
         },
         {
             "_id": "RSUnc",
-            "heading": "Ballots Uncounted"
+            "heading": "Ballots Uncounted",
+            "text": {
+                "_desc": "RSUnc",
+                "en": "Ballots Uncounted"
+            }
         },
         {
             "_id": "RSWri",
-            "heading": "Writein Votes"
+            "heading": "Writein Votes",
+            "text": {
+                "_desc": "RSWri",
+                "en": "Writein Votes"
+            }
         },
         {
             "_id": "RSUnd",
-            "heading": "Undervotes"
+            "heading": "Undervotes",
+            "text": {
+                "_desc": "RSUnd",
+                "en": "Undervotes",
+                "es": "Votos insuficientes",
+                "tl": "Mga kulang na boto",
+                "zh": "投票不足"
+            }
         },
         {
             "_id": "RSOvr",
-            "heading": "Overvotes"
+            "heading": "Overvotes",
+            "text": {
+                "_desc": "RSOvr",
+                "en": "Overvotes",
+                "es": "Sobrevotos",
+                "tl": "Mga sobrang boto",
+                "zh": "過度投票"
+            }
         },
         {
             "_id": "RSSki",
-            "heading": "Skipped Votes"
+            "heading": "Skipped Votes",
+            "text": {
+                "_desc": "RSSki",
+                "en": "Skipped Votes"
+            }
         },
         {
             "_id": "RSExh",
-            "heading": "Exhausted Ballots"
+            "heading": "Exhausted Ballots",
+            "text": {
+                "_desc": "RSExh",
+                "en": "Exhausted Ballots"
+            }
         }
     ],
     "result_styles": [
@@ -256,31 +344,68 @@
     "voting_groups": [
         {
             "_id": "TO",
-            "heading": "Total"
+            "heading": "Total",
+            "text": {
+                "_desc": "TO",
+                "en": "Total",
+                "es": "Total",
+                "tl": "Kabuuan",
+                "zh": "總共"
+            }
         },
         {
             "_id": "ED",
-            "heading": "Election Day"
+            "heading": "Election Day",
+            "text": {
+                "_desc": "ED",
+                "en": "Election Day",
+                "es": "Día de las Elecciones",
+                "tl": "Araw ng Eleksyon",
+                "zh": "投票日"
+            }
         },
         {
             "_id": "MV",
-            "heading": "Vote By Mail"
+            "heading": "Vote By Mail",
+            "text": {
+                "_desc": "MV",
+                "en": "Vote By Mail",
+                "es": "Voto por correo",
+                "tl": "Pagboto sa pamamagitan ng Koreo",
+                "zh": "郵寄投票"
+            }
         },
         {
             "_id": "EV",
-            "heading": "Early Voting"
+            "heading": "Early Voting",
+            "text": {
+                "_desc": "EV",
+                "en": "Early Voting"
+            }
         },
         {
             "_id": "IA",
-            "heading": "In-County"
+            "heading": "In-County",
+            "text": {
+                "_desc": "IA",
+                "en": "In-County"
+            }
         },
         {
             "_id": "XA",
-            "heading": "Other Counties"
+            "heading": "Other Counties",
+            "text": {
+                "_desc": "XA",
+                "en": "Other Counties"
+            }
         },
         {
             "_id": "PV",
-            "heading": "Provisional Voting"
+            "heading": "Provisional Voting",
+            "text": {
+                "_desc": "PV",
+                "en": "Provisional Voting"
+            }
         }
     ]
 }
