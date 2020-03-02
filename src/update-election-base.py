@@ -49,7 +49,6 @@ def update_party(party, phrases_data):
     # This is the key in translations.json.
     phrase_id = f'party_{party_id}'
 
-
     try:
         phrase = phrases_data[phrase_id]
     except KeyError:
