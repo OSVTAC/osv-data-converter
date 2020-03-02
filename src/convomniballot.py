@@ -38,6 +38,7 @@ import html
 import nameutil
 
 from omniutil import(form_bt_suffix)
+from translations import Translator
 
 from config import (Config, config_pattern_list, eval_config_pattern,
                     config_pattern_map, eval_config_pattern_remap,
@@ -68,6 +69,8 @@ SF_ENCODING = 'ISO-8859-1'
 SF_HTML_ENCODING = 'UTF-8'
 
 TURNOUT_LINE_SUFFIX = "Election␤Statement of the Vote"
+TRANSLATIONS_FILE = (os.path.dirname(__file__)+
+                     "/../submodules/osv-translations/translations.json")
 
 OUT_DIR = "../out-orr"
 
@@ -421,7 +424,10 @@ def get_dict_entry(node, keylist:List[str]):
         node = node.get(key,None)
     return node
 
-def form_i18n_str(node:Dict)->Dict:
+def form_i18n_str(
+        node:Dict,  # Omniballot node
+        translate:bool=False    # Include translation lookup
+        )->Dict:
     # Change zh-haunt unto just zh
     en = node['value'].strip()
     translations = node['translations']
@@ -436,6 +442,9 @@ def form_i18n_str(node:Dict)->Dict:
          translations[lang] = decode_JSON_String(v)
 
     return {"en":decode_JSON_String(en), **translations }
+
+
+
 
 def join_i18n_str(
         istr:Dict,          # i18n string to be modified
@@ -676,8 +685,9 @@ def conv_bt_json(j:Dict, bt:str):
                 hj = headerjson[sequence] = {
                     "_id": sequence,
                     "classification": classification,
-                    "header_id": header_id,
-                    "ballot_title": titles[0] }
+                    "header_id": header_id }
+                if title and (len(text)<len(title) or text.find(title)!=0):
+                    hj["ballot_title"] = translator.check(titles[0])
                 if paragraphs:
                     hj["heading_text"] = paragraphs[0]
 
@@ -726,7 +736,7 @@ def conv_bt_json(j:Dict, bt:str):
                     "_id_ext": external_id,
                     "_type": _type,
                     "header_id": lastheader,
-                    "ballot_title": titles[0],
+                    "ballot_title": translator.check(titles[0]),
                     "name": name}
 
                 contest_name = name['en']
@@ -934,6 +944,9 @@ config = Config(CONFIG_FILE, valid_attrs=config_attrs, default_config=config_def
 json_dump_args = PP_JSON_DUMP_ARGS if args.pretty else DEFAULT_JSON_DUMP_ARGS
 
 separator = "|" if args.pipe else "\t"
+
+# Load translations
+translator = Translator(TRANSLATIONS_FILE)
 
 contestlines = []   # Extracted contest definition lines
 candlines = []      # Extracted candidate definition lines
@@ -1296,15 +1309,13 @@ outj = {
     "election": {
         "election_date": election_date,
         "election_area": election_area,
-        "ballot_title": ballot_title,
+        "ballot_title": translator.check(ballot_title),
         "headers": [ headerjson[i] for i in sorted(headerjson) ],
         "contests": [ contestjson[i] for i in sorted(contestjson) ],
         "turnout": {
             "_id": "TURNOUT",
             "_type": "turnout",
-            "ballot_title": {
-                "en": "Registration and Turnout"
-            },
+            "ballot_title": translator["registration_and_turnout_header"],
             "voting_district": config.election_voting_district,
             "result_style": config.turnout_result_style
         },
@@ -1331,3 +1342,4 @@ with open(f"{OUT_DIR}/election.json",'w') as outfile:
     json.dump(outj, outfile, **json_dump_args)
     outfile.write("\n")
 
+translator.print_unmatched("unmatched-translations.txt")

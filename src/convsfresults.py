@@ -39,6 +39,7 @@ from shautil import load_sha_file, load_sha_filename, SHA_FILE_NAME
 from tsvio import TSVReader
 from re2 import re2
 from config import Config, config_idlist
+from translations import Translator
 
 # Library imports
 from datetime import datetime
@@ -75,6 +76,8 @@ SF_SOV_ENCODING ='UTF-8'
 SF_HTML_ENCODING = 'UTF-8'
 
 OUT_DIR = "../out-orr/resultdata"
+TRANSLATIONS_FILE = (os.path.dirname(__file__)+
+                     "/../submodules/osv-translations/translations.json")
 
 SOV_FILE = "psov"
 
@@ -272,6 +275,9 @@ CardTurnOut = []
 if config.card_turnout_contests:
     for i,v in enumerate(config.card_turnout_contests):
         CardContest[v] = i+1
+
+# Load translations
+translator = Translator(TRANSLATIONS_FILE)
 
 #print(config.card_turnout_contests)
 
@@ -807,7 +813,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
         '_results_format':RESULTS_FORMAT,
         "_reporting_time": datetime.now().isoformat(timespec='seconds',sep=' '),
         "_results_id": results_id,
-        "_results_title": {'en':results_title},
+        "_results_title": translator.get(results_title),
         "turnout": {},
         'contests': results_contests
         }
@@ -1720,6 +1726,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
     # End reading zip file
   # End loop over readDictrict
 
+translator.print_unmatched("unmatched-translations.txt")
 
 
 
