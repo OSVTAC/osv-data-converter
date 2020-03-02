@@ -32,6 +32,22 @@ PARAM_NAME_REGEX = [
     (re.compile(r'(_count|_number)$'),r'\d+')
     ]
 
+def form_translate_key(s:str)->str:
+    """
+    Convert a case sensitive phrase name into a dictionary lookup
+    key, independent of case and punctuation.
+    """
+    # Use lowercase on lookup, trim spaces
+    s = s.strip().lower()
+    # Clean special names O'Leary MC KINLEY
+    s = re.sub(r"\bO'([A-Z])",r'O\1', s)
+    s = re.sub(r"\b(MC|LA|MAC) ([A-Z]{2,})",r"\1\2",s)
+    s = re.sub(r"\s+",' ',s)
+    # Replace punctuation, for now with space
+    s = re.sub(r'\s*[\-\/,]+\s*',' ',s)
+    return s
+
+
 class Translator:
 
     def __init__(self,
@@ -61,29 +77,30 @@ class Translator:
         for key, istr in self.translations.items():
             # Remove _desc so we can use the istr dict directly
             istr.pop('_desc',None)
-            en = istr['en']
-            if 'en' not in istr:
+            en = istr.get('en','').strip()
+            if not en:
                 continue
+            enk = form_translate_key(en)
 
             params = istr.pop('_params',None)
             if not params:
                 # Plain translation of full English phrase
                 # Add to translations_by_en[] translation_key_by_en[]
 
-                if en not in self.translations_by_en:
+                if enk not in self.translations_by_en:
                     # Save a unique translation
-                    self.translations_by_en[en] = istr
-                    self.translation_key_by_en[en] = key
+                    self.translations_by_en[enk] = istr
+                    self.translation_key_by_en[enk] = key
                 else:
                     # Collision
-                    if en not in self.translation_collisions:
+                    if enk not in self.translation_collisions:
                         # On initial collision convert to list
-                        self.translation_collisions.add(en)
-                        self.translations_by_en[en] = [ self.translations_by_en[en] ]
+                        self.translation_collisions.add(enk)
+                        self.translations_by_en[enk] = [ self.translations_by_en[enk] ]
 
-                        self.translation_key_by_en[en] = [self.translation_key_by_en[en]]
-                    self.translations_by_en[en].append(istr)
-                    self.translation_key_by_en[en].append(key)
+                        self.translation_key_by_en[enk] = [self.translation_key_by_en[enk]]
+                    self.translations_by_en[enk].append(istr)
+                    self.translation_key_by_en[enk].append(key)
 
             else:
                 # Create parametric translation
@@ -102,6 +119,7 @@ class Translator:
                 # Map the english
                 # First convert special characters as-is
                 en = re.sub(r'([^\w\{\}\- ])',r'\\\1',en)
+                # TODO: We could also make matches independent of spaces, etc.
                 #print(f"Regex for {key}={en} parampats={parampat}")
                 try:
                     # Convert {\d+} to parameter regex
@@ -126,25 +144,26 @@ class Translator:
         Returns the istr dict or none.
         """
 
+        enk = form_translate_key(en)
         if en in self.translations_unmatched:
             return None
-        if en in self.translation_collisions:
+        if enk in self.translation_collisions:
             # filter by key_match
             if not key_match:
                 return None
-            keys = [ key for key in self.translation_key_by_en[en]
+            keys = [ key for key in self.translation_key_by_en[enk]
                      if re.search(key_match, key) ]
             if len(keys)!=1:
                 # If we have a key_match, we could add to unmatched
                 return None
             return self.translations[keys[0]]
 
-        istr = self.translation_key_by_en.get(en, None)
+        istr = self.translation_key_by_en.get(enk, None)
         #print(f"Lookup translation {en}={istr}")
         if istr:
-            if key_match and en in self.translation_key_by_en:
+            if key_match and enk in self.translation_key_by_en:
                 # Validate the key pattern
-                if not re.match(key_match, self.translation_key_by_en[en]):
+                if not re.match(key_match, self.translation_key_by_en[enk]):
                     # Add to unmatched with required key pattern
                     self.translations_unmatched.add(f"{en} [key={key_match}]")
                     return None
@@ -161,7 +180,7 @@ class Translator:
                                  lambda m2: m.group(int(m2.group(1))+1), v)
                         for k, v in istr.items()}
                     # Save in case of a repeat
-                    self.translations_by_en[en] = newistr
+                    self.translations_by_en[enk] = newistr
                     #print(f"Translation for {en} = {newistr}")
                     return newistr
 
