@@ -33,6 +33,36 @@ ELECTION_BASE_PATH = Path('json/election-base.json')
 TRANSLATIONS_JSON_PATH = Path('submodules/osv-translations/translations.json')
 
 
+# Dict mapping "result_stat_types" _id to `translations.json` phrase id.
+RESULT_STAT_TO_PHRASE_ID = {
+    'RSCst': 'category_ballots_cast',
+    'RSEli': 'category_eligible_voters',
+    'RSExh': 'category_exhausted_ballots',
+    'RSOvr': 'category_overvotes',
+    'RSReg': 'category_registered_voters',
+    'RSRej': 'category_ballots_rejected',
+    'RSSki': 'category_skipped_votes',
+    'RSTot': 'category_ballots_counted',
+    'RSTrn': 'category_voter_turnout',
+    'RSUnc': 'category_ballots_uncounted',
+    'RSUnd': 'category_undervotes',
+    'RSVot': 'category_voters_participating',
+    'RSWri': 'category_writein_votes',
+}
+
+
+# Dict mapping "voting_groups" _id to `translations.json` phrase id.
+VOTING_GROUP_TO_PHRASE_ID = {
+    'ED': 'category_election_day',
+    'EV': 'category_early_voting',
+    'IA': 'category_in_county',
+    'MV': 'category_vote_by_mail',
+    'PV': 'category_provisional_voting',
+    'TO': 'category_total',
+    'XA': 'category_other_counties',
+}
+
+
 def log(text):
     print(text, file=sys.stderr)
 
