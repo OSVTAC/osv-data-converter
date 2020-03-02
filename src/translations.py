@@ -41,17 +41,23 @@ class Translator:
         Initialize a translator and load the translations.json definitions.
         """
 
-        self.translations_by_en = {}
-        self.translation_key_by_en = {}
-        self.translation_collisions = set()
-        self.translation_pats = []
+        self.translations_by_en = {} # Translation for an English phrase
+        self.translation_key_by_en = {} # Key found
+        self.translation_collisions = set() # English phrase with multiple translations
+        # If multiple translations are present, then the self.translations_by_en
+        # and self.translation_key_by_en is converted to a list.
+
+        # Translations with {0} {1} etc are mapped
+        self.translation_pats = [] # (key, pat, format) for substitutions
 
         #print(f"reading {filename}")
         self.translations_data = utils.read_json(filename)
+        # translations_data is the root data, translations is the dict by key
         self.translations = self.translations_data['translations']
 
-        self.translations_unmatched = set()
+        self.translations_unmatched = set() # Unmatched translations found
 
+        # Build the English->istr lookup tables and translate patterns
         for key, istr in self.translations.items():
             # Remove _desc so we can use the istr dict directly
             istr.pop('_desc',None)
@@ -62,6 +68,7 @@ class Translator:
             params = istr.pop('_params',None)
             if not params:
                 # Plain translation of full English phrase
+                # Add to translations_by_en[] translation_key_by_en[]
 
                 if en not in self.translations_by_en:
                     # Save a unique translation
@@ -70,7 +77,7 @@ class Translator:
                 else:
                     # Collision
                     if en not in self.translation_collisions:
-                        # On initial collistion convert to list
+                        # On initial collision convert to list
                         self.translation_collisions.add(en)
                         self.translations_by_en[en] = [ self.translations_by_en[en] ]
 
@@ -81,10 +88,11 @@ class Translator:
             else:
                 # Create parametric translation
                 # First form a list of regex to match for params
-                parampat = []
+                parampat = [] # List of regex match for each param
                 for p in params:
                     # find regex
-                    rfound = r'*.?' # Map all other to anything
+                    rfound = r'*.?' # Map unmatched to anything
+                    # Find a regex by matching the param name (HACK)
                     for (idpat, regex) in PARAM_NAME_REGEX:
                         if not idpat.search(p):
                             continue
