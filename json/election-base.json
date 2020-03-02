@@ -2,31 +2,70 @@
     "party_names": [
         {
             "_id": "AI",
-            "heading": "American Independent"
+            "heading": "American Independent",
+            "name": {
+                "en": "American Independent",
+                "es": "Independiente Americano",
+                "tl": "Amerikanong Independiyente",
+                "zh": "美國獨立黨"
+            }
         },
         {
             "_id": "DEM",
-            "heading": "Democratic"
+            "heading": "Democratic",
+            "name": {
+                "en": "Democratic",
+                "es": "Demócrata",
+                "tl": "Demokratiko",
+                "zh": "民主黨"
+            }
         },
         {
             "_id": "GRN",
-            "heading": "Green"
+            "heading": "Green",
+            "name": {
+                "en": "Green",
+                "es": "Verde",
+                "tl": "Luntian",
+                "zh": "綠黨"
+            }
         },
         {
             "_id": "LIB",
-            "heading": "Libertarian"
+            "heading": "Libertarian",
+            "name": {
+                "en": "Libertarian",
+                "es": "Libertario",
+                "tl": "Libertaryan",
+                "zh": "自由黨"
+            }
         },
         {
             "_id": "PF",
-            "heading": "Peace & Freedom"
+            "heading": "Peace & Freedom",
+            "name": {
+                "en": "Peace and Freedom",
+                "es": "Paz y Libertad",
+                "tl": "Kapayapaan at Kalayaan",
+                "zh": "和平與自由黨"
+            }
         },
         {
             "_id": "REP",
-            "heading": "Republican"
+            "heading": "Republican",
+            "name": {
+                "en": "Republican",
+                "es": "Republicano",
+                "tl": "Republikano",
+                "zh": "共和黨"
+            }
         },
         {
             "_id": "NPP",
-            "heading": "No Party Preference"
+            "heading": "No Party Preference",
+            "name": {
+                "en": "No Party Preference"
+            }
         }
     ],
     "result_stat_types": [
@@ -180,6 +219,12 @@
         "exhausted_ballots": {
             "en": "Exhausted Ballots"
         },
+        "no": {
+            "en": "NO",
+            "es": "NO",
+            "tl": "HINDI",
+            "zh": "反對"
+        },
         "overvotes": {
             "en": "Overvotes"
         },
@@ -206,12 +251,6 @@
             "es": "SÍ",
             "tl": "OO",
             "zh": "贊成"
-        },
-        "no": {
-            "en": "NO",
-            "es": "NO",
-            "tl": "HINDI",
-            "zh": "反對"
         }
     },
     "voting_groups": [
