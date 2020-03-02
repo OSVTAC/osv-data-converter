@@ -641,7 +641,6 @@ with TSVReader("../omniballot/contlist-omni.tsv") as r:
 def load_json_table(
     rzip,           # Opened CVR_Export zip file
     filename:str,   # JSON file to load
-    version:str,    # Expected version string
     attrs:dict,     # Expected attributes
     keyattr:str,    # Attribute for data key
     altdict:dict=None,   # Secondary dict or none
@@ -657,8 +656,8 @@ def load_json_table(
         objtype = namedtuple(filename[:-5],attrs.keys())
         j = json.load(f)
         js_version = j['Version'];
-        if js_version!=version:
-            print(f"Warning: {filename} version is {js_version} not {version}")
+        if js_version not in known_manifest_versions:
+            print(f"Warning: {filename} version is {js_version} not known {known_manifest_versions}")
         d = {}
         for i in j['List']:
             for a,t in attrs.items():
@@ -680,6 +679,7 @@ def load_json_table(
 # Extract Manifest data from the CVR json
 ContestManifest_attrs= {
     "Description":str,
+    "DistrictId":str, # New in 5.10
     "Id":str,
     "ExternalId":str,
     "VoteFor":int,
@@ -701,6 +701,8 @@ ContestManifest = {}
 CandidateManifest_by_ContestId = {}
 CandidateManifest_by_Id = {}
 
+known_manifest_versions = {"5.2.18.2", "5.10.11.24"}
+
 haveCVRExport = os.path.isfile("CVR_Export.zip")
 if haveCVRExport:
     with ZipFile("CVR_Export.zip") as rzip:
@@ -710,16 +712,16 @@ if haveCVRExport:
         except:
             pass
 
-        ContestManifest = load_json_table(rzip,"ContestManifest.json","5.2.18.2",
+        ContestManifest = load_json_table(rzip,"ContestManifest.json",
                             ContestManifest_attrs, "Description",
                             ContestManifest_by_Id, "Id")
-        CandidateManifest_by_Id = load_json_table(rzip,"CandidateManifest.json","5.2.18.2",
+        CandidateManifest_by_Id = load_json_table(rzip,"CandidateManifest.json",
                             CandidateManifest_attrs, "Id");
 
         for r in CandidateManifest_by_Id.values():
             if not r.ContestId in CandidateManifest_by_ContestId:
                 CandidateManifest_by_ContestId[r.ContestId] = {}
-            CandidateManifest_by_ContestId[r.ContestId][r.Description] = r
+            CandidateManifest_by_ContestId[r.ContestId][r.Description.upper()] = r
 
 
 # Process the registration and turnout stored in turnoutdata-raw.zip
@@ -1093,17 +1095,18 @@ with ZipFile("resultdata-raw.zip") as rzip:
                             candidate_full_name = name
                             candnames.append(name)
                             candidate_party_id = ""
-                            if name not in candbyname:
+                            NAME = name.upper()
+                            if NAME not in candbyname:
                                 if haveCVRExport:
                                     print(f"Can't match {name} in {contest_id}:{contest_name}");
                                 cand_id = f'{contest_id}{candidate_order:02}'
                                 candidate_type = ""
                                 if is_writein_candidate:
-                                    candbyname[name] = CandidateManifest(
+                                    candbyname[NAME] = CandidateManifest(
                                         name, cand_id, cand_id,
                                         contest_id, "WriteIn")
                             else:
-                                candidate = candbyname[name]
+                                candidate = candbyname[NAME]
                                 cand_id = candidate.Id
                                 candidate_type = candidate.Type
                                 is_writein_candidate = re.search(

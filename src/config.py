@@ -76,7 +76,8 @@ REGEX_NAMES = {
     "letter":r'[a-z]',
     "letterxx":r'[a-z][a-z]?',
     "word":r'[a-z]+',
-    "stndrdth":r'(?:st|nd|rd|th)?'
+    "stndrdth":r'(?:st|nd|rd|th)?',
+    "any":r'.*',
     }
 
 
@@ -145,7 +146,7 @@ def config_whole_pattern_list(l:List[str])->List[Pattern]:
 
 def config_pattern_map(l:List[str])->List[PatternMap]:
     """
-    The config_pattern_list converts a set of lines that form patterns
+    The config_pattern_map converts a set of lines that form patterns
     of the form "string {variable} string=repl {variable} repl"
     into a list of (regex, format) tuples.
     """
@@ -249,6 +250,19 @@ def eval_config_pattern_map(v:str,                  # Value to test
             return (v, n)
         count += n
     return (v, count)
+
+def eval_config_pattern_remap(v:str,                  # Value to test
+                            patlist:List[Pattern],  # List of patterns to try
+                            )->str:      # Returns the formatted string or None
+    """
+    Loops over the list of pattern maps and returns the formatted map value
+    """
+    if not patlist or not v: return (None)
+    for (pat,fmt) in patlist:
+        m = pat.match(v)
+        if m:
+            return fmt.format_map(m.groupdict(""))
+    return (None)
 
 def setDefault(d:dict,          # Dict to set
                keys:List[str]   # Valid attributes

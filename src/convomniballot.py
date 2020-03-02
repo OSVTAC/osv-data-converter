@@ -40,6 +40,7 @@ import nameutil
 from omniutil import(form_bt_suffix)
 
 from config import (Config, config_pattern_list, eval_config_pattern,
+                    config_pattern_map, eval_config_pattern_remap,
                     config_strlist_dict, InvalidConfig, config_str_dict,
                     config_pattern_map_dict, eval_config_pattern_map)
 from re2 import re2
@@ -112,6 +113,7 @@ config_attrs = {
     "trim_sequence_prefix": str,            # prefix to chop
     "retention_pats": config_pattern_list,  # Match retention candidate names
     "contest_party_pats": config_pattern_list,  # Match contests with party
+    "contest_party_crossover_pats": config_pattern_list,  # Match contests with party
     "bt_digits": int,
     "contest_map_file": str,
     "candidate_map_file": str,
@@ -119,10 +121,12 @@ config_attrs = {
     "short_description": config_str_dict,
     "runoff": config_runoff,
     "contest_name_corrections": config_pattern_map_dict,
+    "url_state_results_map": config_pattern_map,
+    "url_state_results": str,
     "election_voting_district": str,
     "election_base_suffix": str,
     "cand_extid_prefix": bool,
-    "turnout_result_style": str
+    "turnout_result_style": str,
     }
 
 config_default = {
@@ -547,12 +551,13 @@ def conv_bt_json(j:Dict, bt:str):
         date_prefix = m.group(1)
     else:
         election_title_en = re.sub(r'(\d+)(st|nd|rd|th), (20\d\d)',r'\1, \3',election_title_en)
-        m = re.match(r'^(.*?)[ - ,]+((:?January|February|March|April|May|June|July|August|September|October|November|December) +(\d+), +(20\d\d))\b',
+        m = re.match(r'^(.*?)[ \- ,]+((:?January|February|March|April|May|June|July|August|September|October|November|December) +(\d+), +(20\d\d))\b',
                   election_title_en)
         if m:
             # 2020 format, month day, year format
             date_prefix=datetime.strptime(m.group(2),"%B %d, %Y").strftime('%Y-%m-%d')
-            election_title = m.group(1)
+            election_title['en'] = m.group(1)
+            #print(f"election_title_en={election_title['en']} admin={election_admin_title}")
         else:
             raise FormatError(f"Unmatched election date in '{election_title_en}' admin={election_admin_title}")
 
@@ -762,7 +767,6 @@ def conv_bt_json(j:Dict, bt:str):
                             break
                 contj['choices'] = []
 
-
         if contest_type == "retention":
             m = eval_config_pattern(text, config.retention_pats)
             if m:
@@ -776,16 +780,31 @@ def conv_bt_json(j:Dict, bt:str):
         else:
             contest_candidate = ""
 
+        title_party = title
         m = eval_config_pattern(title, config.contest_party_pats)
         if (m and
             "options" in box and
             "parties" in box["options"][0]):
             party_rec = box["options"][0]["parties"][0]
             contest_party_id = party_rec.get('external_id',"")
+            title_party += ':'+contest_party_id
+            contest_party_crossover = bool(
+                eval_config_pattern(title_party,config.contest_party_crossover_pats))
             if not found:
                 contj['contest_party_id'] = contest_party_id
+                contj['contest_party_crossover'] = contest_party_crossover
+                newtsvline(partycontestlines, contest_party_id,
+                           contest_party_crossover, mapped_id, external_id, title)
+
         else:
             contest_party_id = ''
+            contest_party_crossover = False
+
+        url_state_results = eval_config_pattern_remap(title_party,
+                                config.url_state_results_map)
+        if url_state_results and not found:
+            #print(f"url_state_results {title_party}={url_state_results}")
+            contj['url_state_results'] = url_state_results
 
         l = jointsvline(sequence,contest_type,contest_id,external_id,vote_for,title,text,
                         approval_required,contest_party_id)
@@ -921,6 +940,7 @@ candlines = []      # Extracted candidate definition lines
 btcontlines = []    # List of contest IDs for each ballot type
 btpctlines = []     # List of (consolidated) precincts by bt
 runofflines = []    # List of contests with a runoff
+partycontestlines = [] # List of party-only contests
 
 candorder = {}      # List of candidate rotations by ballot type
 foundContest = {}   # Prior contest definition line
@@ -937,6 +957,7 @@ election_date = None
 
 approval_required_by_title = {}  # Approval required by measure title
 approval_required_by_contest = {}
+
 
 # Invert the approval_required to make a lookup
 # Default will be "Majority"
@@ -1194,6 +1215,10 @@ putfile("runoff-omni.tsv",
         "runoff_date|runoff_type|contest_id|external_id|title",
         runofflines)
 
+putfile("party-contests.tsv",
+        "party_id|crossover|contest_id|external_id|title",
+        partycontestlines)
+
 # Build the area list
 arealist = [{
     "_id": "ALLPCTS",
@@ -1288,6 +1313,9 @@ outj = {
     "languages": sorted(foundlang),
     "areas": arealist
     }
+
+if config.url_state_results:
+    outj["election"]["url_state_results"] = config.url_state_results
 
 # For now use a fixed path
 path = os.path.dirname(__file__)+f"/../json/election-base{config.election_base_suffix}.json"
