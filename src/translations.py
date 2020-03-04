@@ -173,7 +173,7 @@ class Translator:
                 return None
             return self.translations[keys[0]]
 
-        istr = self.translation_key_by_en.get(enk, None)
+        istr = self.translations_by_en.get(enk, None)
         #print(f"Lookup translation {en}={istr}")
         if istr:
             if key_match and enk in self.translation_key_by_en:
@@ -249,6 +249,7 @@ class Translator:
         if not have_translations:
             newistr = self.lookup_phrase(en)
             if newistr:
+                #print(f"translator.check found {newistr}")
                 return newistr
         return istr
 

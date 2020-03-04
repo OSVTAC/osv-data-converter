@@ -1132,7 +1132,7 @@ writein_header = [
     "contest_id|candidate_order|candidate_id|candidate_type"\
         "|candidate_full_name|candidate_party_id|is_writein_candidate",
     ]
-for wiformat in range(0,len(writeinfiles)):
+for wiformat in range(1,len(writeinfiles)):
     filename = writeinfiles[wiformat]
     if not os.path.isfile(filename): continue
 # Load QualifiedWritin from CVR manifest
