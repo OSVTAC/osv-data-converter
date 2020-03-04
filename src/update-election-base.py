@@ -39,16 +39,16 @@ RESULT_STAT_TO_PHRASE_ID = {
     'RSCst': 'category_ballots_cast',
     'RSEli': 'category_eligible_voters',
     'RSExh': 'category_exhausted_ballots',
-    'RSOvr': 'category_overvotes',
+    'RSOvr': 'category_votes_overvotes',
     'RSReg': 'category_registered_voters',
     'RSRej': 'category_ballots_rejected',
     'RSSki': 'category_skipped_votes',
-    'RSTot': 'category_ballots_counted',
+    'RSTot': 'category_votes_choices_total',
     'RSTrn': 'category_voter_turnout',
     'RSUnc': 'category_ballots_uncounted',
-    'RSUnd': 'category_undervotes',
+    'RSUnd': 'category_votes_undervotes',
     'RSVot': 'category_voters_participating',
-    'RSWri': 'category_writein_votes',
+    'RSWri': 'category_votes_writein',
 }
 
 
