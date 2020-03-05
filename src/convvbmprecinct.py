@@ -34,6 +34,8 @@ AC = VBM ballots accepted
 PN = VBM ballots pending
 CH = VBM ballots challenged
 
+Requires the following EMS files:
+    "../ems/distpct.tsv.gz" list of precincts by district
 """
 
 VERSION='0.0.1'     # Program version

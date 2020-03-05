@@ -142,8 +142,16 @@ def processfile(url, subdir, filename):
 content = urllib.request.urlopen(args.url)
 lastRelease = ''
 releaseTitle = ''
+incomment = False
 for lineb in content:
     line = lineb.decode('utf-8')
+    if re.search(r'<!--<div class="row">', line):
+        incomment = True
+        continue
+    if incomment and not re.search(r'-->', line):
+        continue
+    incomment = False
+
     m=re.search(r'<h2 class="panel-title">(.+)</h2>', line)
     if m:
         releaseTitle = m.group(1)

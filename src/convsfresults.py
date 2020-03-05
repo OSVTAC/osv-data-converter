@@ -133,8 +133,9 @@ VOTING_STATS = OrderedDict([
     ('RSExh', 'Exhausted Ballots')  # All RCV choices were eliminated (RCV only)
     ])
 # These district subtotals are meaningless
-countywide_districts = {'0','SEN11'}
 
+COUNTY_DISTRICT_ID = '0'
+countywide_districts = {COUNTY_DISTRICT_ID,'SEN11'}
 vgnamemap = {'Total':'TO',
              'Election Day':'ED',
              'Vote by Mail':'MV',
@@ -220,6 +221,8 @@ def parse_args():
                         help='include precincts with zero voters')
 
     args = parser.parse_args()
+    # Force withzero for now.
+    args.withzero = True
 
     return args
 
@@ -778,7 +781,48 @@ with ZipFile("turnoutdata-raw.zip") as rzip:
             EWM_turnout = f.loaddict()
 
 # Save registration by subtotal and precinct
-RSRegSave = dict(TO={},ED={},MV={})
+# RSRegSave['MV']['PCT1101'] has registration for vote by mail in precinct 1101
+RSRegSave:Dict[str,Dict[str,int]] = dict(TO={},ED={},MV={})
+RSRegSave_MV:Dict[str,int] = RSRegSave['MV']
+RSRegSave_ED:Dict[str,int] = RSRegSave['ED']
+RSRegSave_TO:Dict[str,int] = RSRegSave['TO']
+
+# Vote by mail registration is found in the vbmprecinct.csv along with
+# a breakdown by party and precinct. We save the MV "registration" for
+# all voters in each precinct. We define MV registration as mail ballots
+# issued, so is permanent vote by mail plus requested mail ballots. These
+# are not eligible for ED voting (unless the mail ballot is surrendered),
+# so we define ED registration as the difference between mail ballots issued
+# and total registration
+
+# Extract the MV registration for each precinct
+for VotingPrecinctID, d in VBM_turnout.items():
+    RSRegSave_MV['PCT'+VotingPrecinctID] = int(d['Issued'])
+
+# Compute countywide MV registration by summary district
+SDIST_header = "area_id|precinct_ids"
+# Precincts for each summary district are stored sdistpct[area_id]=[precinct_ids]
+sdistpct:Dict[str,List[str]] = {}
+
+# Contests may be a subset of the whole county, e.g. supervisorial district,
+# so have a subset of voters when the contest district crosses the summary district
+# The partial
+# RSRegSummary['ASSM17']['NEIG12']['MV'] = 12,345
+# So RSRegSummary['ASSM17'] has a list of summary districts for contests
+# that are in ASSM17, eg. NEIG12 is one
+RSRegSummary:Dict[str,Dict[str,Dict[str,int]]] = {}
+
+if os.path.isfile("sdistpct.tsv"):
+    with TSVReader("sdistpct.tsv",validate_header=SDIST_header) as f:
+        for (area_id, precinct_ids) in f.readlines():
+            # Convert precinct number to area ID
+            precincts = ['PCT'+s for s in precinct_ids.split()]
+            # Save the precinct list for contest-district tabulation
+            sdistpct[area_id] = precincts
+            reg = 0
+            for p in precincts:
+                reg += RSRegSave_MV[p]
+            RSRegSave_MV[area_id] = reg
 
 # Process the downloaded SF results stored in resultdata-raw.zip
 with ZipFile("resultdata-raw.zip") as rzip:
@@ -831,6 +875,8 @@ with ZipFile("resultdata-raw.zip") as rzip:
             linenum = 0
             for line in f:
                 line = decodeline(line, SF_SOV_ENCODING)
+                # contest_party is appended to the contest name, so trim it!
+                line = re.sub(r' +␤\w+','',line)
                 if precincts_reported_pat.match(line):
                     if not contest_id:
                         print(f"summary contest name mismatch {linenum}:{line}")
@@ -1059,6 +1105,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         cols[6] == col0_header):
                         have_EDMV = True
                         have_RSCst = True
+                        have_RSReg = True
                         cand_start_col = 7
                         subtotal_col = 0
 
@@ -1068,9 +1115,19 @@ with ZipFile("resultdata-raw.zip") as rzip:
                           cols[5] == col0_header):
                         #print("WARNING:have_EDMV = False")
                         # Maybe only in the zero report
-                        have_EDMV = True # False in prior zero reports
+                        have_EDMV = True
+                        have_RSReg = True
                         have_RSCst = False
                         cand_start_col = 6
+
+                    elif (cols[1] == 'Undervotes' and
+                          cols[2] == 'Overvotes' and
+                          cols[4] == col0_header):
+                        #print("WARNING:have_EDMV = False")
+                        # Maybe only in the zero report
+                        have_EDMV = True # False in prior zero reports
+                        have_RSCst = have_RSReg = False
+                        cand_start_col = 5
                     else:
                         raise FormatError(f"sov column header mismatch {linenum}:{cols}")
 
@@ -1090,7 +1147,11 @@ with ZipFile("resultdata-raw.zip") as rzip:
                             if name.endswith(writeincand_suffix):
                                 is_writein_candidate = True
                                 name = name[:-len(writeincand_suffix)]
+                                #print(f"Writein {name} {i}/{ncols}")
                                 if i+1 == ncols:
+                                    # Number of columns will be ncols+1 for percent
+                                    # Bogus columns get inserted into the XLS
+                                    # So sometimes it's ncols+2
                                     expected_cols = i+2
                                 #continue
                             name = re.sub(r'␤\(\w+\)$','',name)
@@ -1239,8 +1300,14 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     cols[0] = "Total"
                     next_is_district = True
 
-                if (expected_cols != ncols and
-                    last_cand_col+1 != ncols):
+                if (expected_cols != ncols and not
+                    # column length can vary with writein at the end to
+                    # add 0, 1 or 2 extra columns for percentage. The
+                    # percentage can be omitted with no votes, or if nonzero
+                    # is added, but sometimes there are extra blank columns
+                    # mysteriously inserted into the xls. :-(P
+                    (is_writein_candidate and
+                      last_cand_col < ncols and last_cand_col+3 >= ncols)):
                     print(f"pct_col_0={pct_col_0} have_EDMV={have_EDMV} area_id={area_id} precinct_name={precinct_name} readDictrict={readDictrict}")
                     raise FormatError(f"Mismatched Column count {ncols}!={expected_cols}:{last_cand_col} {linenum}:{line}")
 
@@ -1257,6 +1324,19 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     RSRej = 0 # Not available
                     if RSTrn == "N/A":
                         RSTrn = "0.0";
+                elif not have_RSReg:
+                    (RSUnd, RSOvr) = [int(float(cols[i])) for i in [1,2]]
+                    total_votes = RSTot = int(float(cols[total_col]))
+                    RSCst = total_ballots = int(RSOvr)+int((int(RSTot)+int(RSUnd))/vote_for)
+                    if area_id == 'ALLPCTS':
+                        # Use computed totals
+                        RSReg = grand_total[subtotal_type][2]
+                    else:
+                        RSReg = RSRegSave[subtotal_type].get(area_id,None)
+                        if RSReg==None:
+                            RSReg = RSRegSave['TO'][area_id]
+                    # RSRej not available
+                    RSRej = RSExh = 0
                 elif not have_RSCst:
                     (RSReg, RSUnd, RSOvr) = [int(float(cols[i])) for i in [1,2,4]]
                     total_votes = RSTot = int(float(cols[total_col]))
@@ -1327,6 +1407,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         raise FormatError(f"subtotal name mismatch {linenum}: {line}")
                 if no_voter_precinct and subtotal_type == 'TO':
                     no_voter_precincts.add(area_id)
+                    RSRegSave[subtotal_type][area_id] = 0
                     continue
                 if in_turnout:
                     stats = [area_id, subtotal_type, RSReg, RSCst]
@@ -1525,7 +1606,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                                     votes_required = (total_votes*num+denom-1)//denom
                                 elif approval_percent_pat.match(approval_required):
                                     votes_required = ((total_votes*
-                                         approval_percent_pat.group(1)+00)//100)
+                                         int(approval_percent_pat.group(1)+'00'))//100)
                                 else:
                                     votes_required = 0
                                 if votes_required:
