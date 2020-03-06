@@ -164,6 +164,9 @@ distcodemap = {
     'CONGRESSIONAL DISTRICT 12':'CONG12',
     'CONGRESSIONAL DISTRICT 13':'CONG13',
     'CONGRESSIONAL DISTRICT 14':'CONG14',
+    'CONG 12':'CONG12',
+    'CONG 13':'CONG13',
+    'CONG 14':'CONG14',
     'ASSEMBLY DISTRICT 17':'ASSM17',
     'ASSEMBLY DISTRICT 19':'ASSM19',
     'SUPERVISORIAL DISTRICT 1':'SUPV1',
@@ -177,6 +180,19 @@ distcodemap = {
     'SUPERVISORIAL DISTRICT 9':'SUPV9',
     'SUPERVISORIAL DISTRICT 10':'SUPV10',
     'SUPERVISORIAL DISTRICT 11':'SUPV11',
+    'ASMBLY 17':'ASSM17',
+    'ASMBLY 19':'ASSM19',
+    'SUP DIST 1':'SUPV1',
+    'SUP DIST 2':'SUPV2',
+    'SUP DIST 3':'SUPV3',
+    'SUP DIST 4':'SUPV4',
+    'SUP DIST 5':'SUPV5',
+    'SUP DIST 6':'SUPV6',
+    'SUP DIST 7':'SUPV7',
+    'SUP DIST 8':'SUPV8',
+    'SUP DIST 9':'SUPV9',
+    'SUP DIST 10':'SUPV10',
+    'SUP DIST 11':'SUPV11',
     'BAYVIEW/HUNTERS POINT':'NEIG1',
     'CHINATOWN':'NEIG2',
     'CIVIC CENTER/DOWNTOWN':'NEIG3',
@@ -203,6 +219,24 @@ distcodemap = {
     'VISITATION VALLEY':'NEIG23',
     'WEST OF TWIN PEAKS':'NEIG24',
     'WESTERN ADDITION':'NEIG25',
+    'BAYVW/HTRSPT':'NEIG1',
+    'CHINA':'NEIG2',
+    'CVC CTR/DWTN':'NEIG3',
+    'DIAMD HTS':'NEIG4',
+    'EXCELSIOR':'NEIG5',
+    'HAIGHT ASH':'NEIG6',
+    'LRL HTS/ANZA':'NEIG10',
+    'MAR/PAC HTS':'NEIG11',
+    'N BERNAL HTS':'NEIG14',
+    'N EMBRCDRO':'NEIG15',
+    'RICHMOND':'NEIG17',
+    'SECLF/PREHTS':'NEIG18',
+    'S BERNAL HTS':'NEIG19',
+    'SOMA':'NEIG20',
+    'UPRMKT/EURKA':'NEIG22',
+    'VISITA VLY':'NEIG23',
+    'W TWIN PKS':'NEIG24',
+    'WST ADDITION':'NEIG25',
 }
 
 class FormatError(Exception):pass # Error matching expected input format
@@ -823,6 +857,8 @@ RSRegSave_MV:RS_Area_Table = RSRegSave['MV']
 RSRegSave_ED:RS_Area_Table= RSRegSave['ED']
 RSRegSave_TO:RS_Area_Table = RSRegSave['TO']
 
+RSRegSave_MV['CONG13']=RSRegSave_ED['CONG13']=RSRegSave_TO['CONG13']=0
+
 # Vote by mail registration is found in the vbmprecinct.csv along with
 # a breakdown by party and precinct. We save the MV "registration" for
 # all voters in each precinct. We define MV registration as mail ballots
@@ -947,6 +983,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
 
     # Read the SOV results
     have_dsov = "dpsov.psv" in zipfilenames or "dsov.psv" in zipfilenames
+    print(f"have_dsov={have_dsov}")
     for readDictrict in [False, True]:
       for sovfile in ["sov.psv","sov.tsv","psov.psv","psov.tsv",'']:
         if readDictrict:
@@ -988,7 +1025,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
         precinct_name_pat = re2(r'^(?:Pct|PCT) (\d+)(?:/(\d+))?( MB)?$')
         subtotal_name_pat = re2(r'^(Election Day|Vote by Mail|Total)$')
         # Senate omitted to skip
-        district_category_pat=re2(r'^(CONGRESSIONAL|ASSEMBLY|SUPERVISORIAL|NEIGHBORHOOD)(?:$|[\|\t])')
+        district_category_pat=re2(r'^(United States Representative|Member of the State Assembly|County Supervisor|Neighborhood|CONGRESSIONAL|ASSEMBLY|SUPERVISORIAL|NEIGHBORHOOD)(?:$|[\|\t])')
         # If grand_totals_wrong compute Cumulative
         skip_area_pat_str = (r'^(Cumulative|Cumulative - Total|Countywide|Countywide - Total|City and County - Total)$'
                          if grand_totals_wrong and not readDictrict else
@@ -1297,8 +1334,8 @@ with ZipFile("resultdata-raw.zip") as rzip:
 
                 elif next_is_district:
                     # This should be a district heading
-                    if ncols!=1 and ncols!=7:
-                        raise FormatError(f"sov district heading mismatch {linenum}:{line}")
+                    if ncols!=1 and ncols!=7 and ncols!=5:
+                        raise FormatError(f"sov district heading mismatch={ncols} {cols} {linenum}:{line}")
                     name = cols[0]
                     #Reform name
                     name = re.sub(r'^(\d+)(ST|ND|RD|TH) (.+)',
@@ -1306,8 +1343,10 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     #if in_turnout:
                         #print(name,file=df)
                     area_id = distcodemap.get(name,'???')
+                    if area_id=='???':
+                        print(f"Can't map district code {name}")
                     next_is_district = False
-                    skip_area = False
+                    skip_area = area_id == 'CONG13'
                     have_EDMV = True
                     subtotal_col = 0
                     continue
@@ -1499,8 +1538,9 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         if grand_totals_wrong:
                             total_precinct_ballots = grand_total['ED'][3]
                             total_mail_ballots = grand_total['MV'][3]
-                            total_precinct_registration = grand_total['ED'][2]
-                            total_mail_registration = grand_total['MV'][2]
+                            RSRegSave_ED['ALLPCTS'] = total_precinct_registration = grand_total['ED'][2]
+                            RSRegSave_ED['MV'] = total_mail_registration = grand_total['MV'][2]
+
                             #print(f'Turnout grand totals {total_precinct_ballots}/{total_mail_ballots}\n')
                         else:
                             if subtotal_type == 'TO':
@@ -1519,6 +1559,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     else:
                         if have_EDMV:
                             newtsvline(pctturnout, area_id, RSReg,
+                                RSRegSave_ED[area_id], RSRegSave_MV[area_id],
                                 RSCst, total_precinct_ballots, total_mail_ballots)
                         else:
                             newtsvline(pctturnout, area_id, RSReg,
@@ -1816,7 +1857,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         headerline, contest_rcvlines,
                         contest_totallines, contest_arealines)
             putfilea("pctturnout.tsv",
-                    "area_id|registration|total_ballots|ed_ballots|mv_ballots",
+                    "area_id|total_registration|ed_registration|mv_registration|total_ballots|ed_ballots|mv_ballots",
                     pctturnout)
             # Compute per-card turnout
             # TODO
@@ -1872,7 +1913,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     candlist)
 
             putfile("pctturnout.tsv",
-                    "area_id|registration|total_ballots|ed_ballots|mv_ballots",
+                    "area_id|total_registration|ed_registration|mv_registration|total_ballots|ed_ballots|mv_ballots",
                     pctturnout)
 
         # End reading sov.tsv
