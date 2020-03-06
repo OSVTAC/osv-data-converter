@@ -430,7 +430,7 @@ def form_i18n_str(
         )->Dict:
     # Change zh-haunt unto just zh
     en = node['value'].strip()
-    translations = node['translations']
+    translations = {k:v for k,v in node['translations'].items() if v}
     zh = translations.pop('zh-hant',None)
     if zh:
         if zh.startswith(en+' '):

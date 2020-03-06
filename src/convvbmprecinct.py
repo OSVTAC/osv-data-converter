@@ -26,6 +26,7 @@ Convert the turnout-raw/vbmprecinct.tsv into:
     issued, returned, accepted, pending, challenged
 
 * sdistpct.tsv - Summary areas with list of precincts
+* pctsdist.tsv - Precinct groups with list of Summary areas
 
 Group codes:
 IS = VBM ballots issued
@@ -84,6 +85,7 @@ ordermap = dict([(v,str(i)) for i,v in enumerate(distHeadMap.values())])
 
 
 sdistpct = {}
+pctsdist = {}
 sdisttotal = {}
 
 partyCodeHeader = "TO|AI|DEM|GRN|LIB|PF|REP|NPP"
@@ -126,6 +128,11 @@ def addGroupCols(area:str):
             grouptotals[j] += int(v)
 
 
+def sortkey(k):
+    k = k[0]
+    order=ordermap.get(k[0:4],' ')
+    return order+k[4:] if len(k)>5 else order+'0'+k[4:]
+
 with ZipFile("turnoutdata-raw.zip") as rzip:
     with TSVReader("vbmprecinct.csv",opener=rzip,binary_decode=True,
                     validate_header=VBM_header) as f:
@@ -143,6 +150,9 @@ with ZipFile("turnoutdata-raw.zip") as rzip:
                 groupcols.append(cols)
 
             addGroupCols('ALLPCTS')
+            pcta = 'PCT'+pct
+            sdists = []
+            # Create reverse map precinct to summary groups
             for h,c in distHeadMap.items():
                 area = precinctNeigh[pct] if c=='NEIG' else c+r[h]
                 if area=='CONG13':
@@ -151,15 +161,18 @@ with ZipFile("turnoutdata-raw.zip") as rzip:
                     sdistpct[area] = []
 
                 sdistpct[area].append(pct)
+                sdists.append(area)
+
                 addGroupCols(area)
+
+            # Form a space separated list
+            sdist_group = ' '.join(sorted(sdists, key=sortkey))
+            if sdist_group not in pctsdist:
+                pctsdist[sdist_group] = []
+            pctsdist[sdist_group].append(pct)
 
 
         # Output district summaries
-        def sortkey(k):
-            k = k[0]
-            order=ordermap.get(k[0:4],' ')
-            return order+k[4:] if len(k)>5 else order+'0'+k[4:]
-
 
         for area,rows in sorted(sdisttotal.items(), key=sortkey):
             for i,group in enumerate(groupCodes):
@@ -177,6 +190,10 @@ with ZipFile("turnoutdata-raw.zip") as rzip:
                    header="area_id|precinct_ids") as o:
         for area,pcts in sorted(sdistpct.items(), key=sortkey):
             o.addline(area,' '.join(pcts))
+    with TSVWriter('pctsdist.tsv',sort=False,sep=separator,
+                   header="precinct_ids|area_ids") as o:
+        for area,pcts in sorted(pctsdist.items(), key=sortkey):
+            o.addline(' '.join(pcts),area)
 
 
 

@@ -65,6 +65,18 @@ Creates the following files:
 #TODO:
 # -
 
+###################################
+
+# Types defined to document usage
+
+Area_Id = str           # PCTnnn or district code representing a geographic area
+Precinct_Id = str       # Precinct Id without the PCT prefix
+Result_Stat_Id = str    # RSTot, RSCst, etc.
+Voting_Group_Id = str   # ED (Election Day) MV (Vote by Mail) TO (Total) count group
+Contest_Id = str        # Primary Id for a contest
+
+###################################
+
 _log = logging.getLogger(__name__)
 
 VERSION='0.0.1'     # Program version
@@ -225,6 +237,27 @@ def parse_args():
     args.withzero = True
 
     return args
+
+def dict_append(d:Dict, k, v):
+    """
+    Same as d[k].append(v) but works if k is not in d
+    """
+    if k not in d: d[k] =[]
+    d[k].append(v)
+
+def dict_extend(d:Dict, k, v):
+    """
+    Same as d[k].extend(v) but works if k is not in d
+    """
+    if k not in d: d[k] =[]
+    d[k].extend(v)
+
+def dict_add(d:Dict, k, v:int):
+    """
+    Same as d[k]+=v but works if k is not in d
+    """
+    if k not in d: d[k] = 0
+    d[k] += v
 
 def unpack(
     fmt:str,     # Format string
@@ -782,10 +815,13 @@ with ZipFile("turnoutdata-raw.zip") as rzip:
 
 # Save registration by subtotal and precinct
 # RSRegSave['MV']['PCT1101'] has registration for vote by mail in precinct 1101
-RSRegSave:Dict[str,Dict[str,int]] = dict(TO={},ED={},MV={})
-RSRegSave_MV:Dict[str,int] = RSRegSave['MV']
-RSRegSave_ED:Dict[str,int] = RSRegSave['ED']
-RSRegSave_TO:Dict[str,int] = RSRegSave['TO']
+RS_Area_Table = Dict[Area_Id,int]
+RS_VG_Table = Dict[Voting_Group_Id,RS_Area_Table]
+
+RSRegSave:RS_VG_Table = dict(TO={},ED={},MV={})
+RSRegSave_MV:RS_Area_Table = RSRegSave['MV']
+RSRegSave_ED:RS_Area_Table= RSRegSave['ED']
+RSRegSave_TO:RS_Area_Table = RSRegSave['TO']
 
 # Vote by mail registration is found in the vbmprecinct.csv along with
 # a breakdown by party and precinct. We save the MV "registration" for
@@ -795,14 +831,10 @@ RSRegSave_TO:Dict[str,int] = RSRegSave['TO']
 # so we define ED registration as the difference between mail ballots issued
 # and total registration
 
-# Extract the MV registration for each precinct
-for VotingPrecinctID, d in VBM_turnout.items():
-    RSRegSave_MV['PCT'+VotingPrecinctID] = int(d['Issued'])
-
 # Compute countywide MV registration by summary district
-SDIST_header = "area_id|precinct_ids"
-# Precincts for each summary district are stored sdistpct[area_id]=[precinct_ids]
-sdistpct:Dict[str,List[str]] = {}
+# Precincts for each summary district are stored sdistpct[SUPV4]=[PCT9401...]
+# Summary district for each precinct sdistpct[PCT9401]=[CONG12...]
+sdistpct:Dict[Area_Id,List[Area_Id]] = {}
 
 # Contests may be a subset of the whole county, e.g. supervisorial district,
 # so have a subset of voters when the contest district crosses the summary district
@@ -812,8 +844,15 @@ sdistpct:Dict[str,List[str]] = {}
 # that are in ASSM17, eg. NEIG12 is one
 RSRegSummary:Dict[str,Dict[str,Dict[str,int]]] = {}
 
+# Extract the MV registration for each precinct
+vbm_reg_all = 0
+for VotingPrecinctID, d in VBM_turnout.items():
+    v = int(d['Issued'])
+    RSRegSave_MV['PCT'+VotingPrecinctID] = v
+    vbm_reg_all += v
+
 if os.path.isfile("sdistpct.tsv"):
-    with TSVReader("sdistpct.tsv",validate_header=SDIST_header) as f:
+    with TSVReader("sdistpct.tsv",validate_header="area_id|precinct_ids") as f:
         for (area_id, precinct_ids) in f.readlines():
             # Convert precinct number to area ID
             precincts = ['PCT'+s for s in precinct_ids.split()]
@@ -823,6 +862,22 @@ if os.path.isfile("sdistpct.tsv"):
             for p in precincts:
                 reg += RSRegSave_MV[p]
             RSRegSave_MV[area_id] = reg
+
+if  os.path.isfile("pctsdist.tsv"):
+    with TSVReader("pctsdist.tsv",validate_header="precinct_ids|area_ids") as f:
+        for (precinct_ids, area_ids) in f.readlines():
+            # Save list of summary districts per precinct
+            sdists = area_ids.split()
+            for pct in precinct_ids.split():
+                sdistpct['PCT'+pct] = sdists
+
+# Extract the MV registration for each precinct
+for pcta, v in RSRegSave_MV.items():
+    if not pcta.startswith('PCT'):
+        break
+    for sdist in sdistpct[pcta]:
+        dict_add(RSRegSave_MV, sdist, v)
+RSRegSave_MV['ALLPCTS'] = vbm_reg_all
 
 # Process the downloaded SF results stored in resultdata-raw.zip
 with ZipFile("resultdata-raw.zip") as rzip:
@@ -1318,6 +1373,11 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         cols[2] = "0"
                     else:
                         cols[1] = "0"
+
+                subtotal_type = 'TO'
+                if subtotal_col >= 0:
+                    subtotal_type = vgnamemap.get(cols[subtotal_col],'')
+
                 if in_turnout:
                     (RSReg, RSCards, RSCst) = [int(float(cols[i])) for i in [1,3,5]]
                     RSTrn = cols[6]
@@ -1336,6 +1396,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         if RSReg==None:
                             RSReg = RSRegSave['TO'][area_id]
                     # RSRej not available
+                    #print(f"{area_id}:{subtotal_type} {RSCst}/{RSReg}")
                     RSRej = RSExh = 0
                 elif not have_RSCst:
                     (RSReg, RSUnd, RSOvr) = [int(float(cols[i])) for i in [1,2,4]]
@@ -1371,9 +1432,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                                 cons_precincts)
                     cons_precincts = ''
                 # Map the subtotal_type
-                subtotal_type = 'TO'
                 if subtotal_col >= 0:
-                    subtotal_type = vgnamemap.get(cols[subtotal_col],'')
                     if subtotal_type == 'ED':
                         if area_id != "ALLPCTS":
                             checkDuplicate(pctturnout_reg, precinct_name_orig, RSReg,
@@ -1410,8 +1469,20 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     RSRegSave[subtotal_type][area_id] = 0
                     continue
                 if in_turnout:
+                    if area_id in RSRegSave_MV:
+                        #Convert total registration to MV & ED, MV is first
+                        if subtotal_type == 'MV':
+                            RSRegSave_ED[area_id] = RSReg - RSRegSave_MV[area_id]
+                            RSReg = RSRegSave_MV[area_id]
+                        elif subtotal_type == 'ED':
+                            RSReg = RSRegSave_ED[area_id]
+                        else:
+                            RSRegSave_TO[area_id] = RSReg
+                        #print(f"{subtotal_type}:RSRegSave_MV[{area_id}]={RSRegSave_MV[area_id]}/{RSReg}")
+                    else:
+                        RSRegSave[subtotal_type][area_id] = RSReg
+
                     stats = [area_id, subtotal_type, RSReg, RSCst]
-                    RSRegSave[subtotal_type][area_id] = RSReg
                     outline = jointsvline(*stats)
                     if area_id.startswith("PCT") and (
                         subtotal_col <0 or
@@ -1428,6 +1499,8 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         if grand_totals_wrong:
                             total_precinct_ballots = grand_total['ED'][3]
                             total_mail_ballots = grand_total['MV'][3]
+                            total_precinct_registration = grand_total['ED'][2]
+                            total_mail_registration = grand_total['MV'][2]
                             #print(f'Turnout grand totals {total_precinct_ballots}/{total_mail_ballots}\n')
                         else:
                             if subtotal_type == 'TO':
@@ -1474,7 +1547,8 @@ with ZipFile("resultdata-raw.zip") as rzip:
                                 {
                                     "_id": "RSReg",
                                     "heading": "Registered Voters",
-                                    "results": [total_registration, total_registration, total_registration]
+                                    "results": [total_registration, total_precinct_registration,
+                                                total_mail_registration]
                                 },
                                 {
                                     "_id": "RSCst",
@@ -1554,7 +1628,6 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         # Put grand totals first
                         if grand_totals_wrong :
                             # Some MB precincts have missing ED registration
-                            grand_total['ED'][2] = grand_total['MV'][2]
                             contest_totallines.append(jointsvline(*grand_total['ED']))
                             contest_totallines.append(jointsvline(*grand_total['MV']))
                             outline2 = jointsvline(*grand_total['TO'])
@@ -1606,7 +1679,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                                     votes_required = (total_votes*num+denom-1)//denom
                                 elif approval_percent_pat.match(approval_required):
                                     votes_required = ((total_votes*
-                                         int(approval_percent_pat.group(1)+'00'))//100)
+                                         int(approval_percent_pat.group(1)))//100)
                                 else:
                                     votes_required = 0
                                 if votes_required:
