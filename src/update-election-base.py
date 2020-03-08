@@ -37,12 +37,12 @@ TRANSLATIONS_JSON_PATH = Path('submodules/osv-translations/translations.json')
 # Dict mapping "result_stat_types" _id to `translations.json` phrase id.
 RESULT_STAT_TO_PHRASE_ID = {
     'RSCst': 'category_ballots_cast',
-    'RSEli': 'category_eligible_voters',
-    'RSExh': 'category_exhausted_ballots',
+    'RSEli': 'category_voters_eligible',
+    'RSExh': 'category_votes_rcv_exhausted',
     'RSOvr': 'category_votes_overvotes',
-    'RSReg': 'category_registered_voters',
+    'RSReg': 'category_voters_registered',
     'RSRej': 'category_ballots_rejected',
-    'RSSki': 'category_skipped_votes',
+    'RSSki': 'category_votes_skipped',
     'RSTot': 'category_votes_choices_total',
     'RSTrn': 'category_voter_turnout',
     'RSUnc': 'category_ballots_uncounted',
