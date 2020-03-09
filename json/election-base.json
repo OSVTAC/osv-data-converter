@@ -11,6 +11,14 @@
             }
         },
         {
+            "_id": "AINPP",
+            "heading": "American Independent Crossover",
+            "contest_party_crossover": true,
+            "name": {
+                "en": "American Independent Crossover",
+            }
+        },
+        {
             "_id": "DEM",
             "heading": "Democratic",
             "name": {
@@ -18,6 +26,14 @@
                 "es": "Demócrata",
                 "tl": "Demokratiko",
                 "zh": "民主黨"
+            }
+        },
+        {
+            "_id": "DEMNPP",
+            "heading": "Democratic Crossover",
+            "contest_party_crossover": true,
+            "name": {
+                "en": "Democratic",
             }
         },
         {
@@ -33,6 +49,17 @@
         {
             "_id": "LIB",
             "heading": "Libertarian",
+            "name": {
+                "en": "Libertarian",
+                "es": "Libertario",
+                "tl": "Libertaryan",
+                "zh": "自由黨"
+            }
+        },
+        {
+            "_id": "LIBNPP",
+            "heading": "Libertarian Crossover",
+            "contest_party_crossover": true,
             "name": {
                 "en": "Libertarian",
                 "es": "Libertario",

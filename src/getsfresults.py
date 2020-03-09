@@ -57,6 +57,8 @@ def parse_args():
                         help='use pipe separator else tab')
     parser.add_argument('-X', dest='noxml', action='store_true',
                         help='exclude xml format')
+    parser.add_argument('-f', dest='recheck', action='store_true',
+                        help='force recheck for downloads missing')
     parser.add_argument('-V', dest='nocvr', action='store_true',
                         help='exclude CVR json format')
     parser.add_argument('url', help='URL of the detailed reports index page',
@@ -106,7 +108,7 @@ urlfile = open("resultdata-raw/urls.tsv",'w');
 # Get the existing release
 priorReleaseLine = ''
 releaseFile = "resultdata-raw/lastrelease.txt"
-if os.path.isfile(releaseFile):
+if os.path.isfile(releaseFile) and not args.recheck:
     with open(releaseFile) as f:
         priorReleaseLine = f.read().strip()
 
@@ -157,6 +159,10 @@ for lineb in content:
         releaseTitle = m.group(1)
     m =re.search(r'href="([^"<>]*/20\d{6}/data/(20\d{6}(?:_\d)?)/(?:([^/"]+)/)?(?:20\d{6}_(?:\d_)?)?([^/"]+))"',  line)
     if not m:
+        m = re.search(r'href="([^"<>]*/20\d{6}/data/(Registration_20\d\d\d\d\d\d.txt))"', line)
+        if m:
+            url, filename = m.groups()
+            processfile(url, None, filename)
         continue
 
     url, release, subdir, filename = m.groups()
