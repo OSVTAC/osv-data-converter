@@ -268,7 +268,7 @@ def parse_args():
 
     args = parser.parse_args()
     # Force withzero for now.
-    args.withzero = True
+    # args.withzero = True
 
     return args
 
@@ -1413,6 +1413,9 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     else:
                         cols[1] = "0"
 
+                def convRSOvr(RSOvr):
+                    return int(int(RSOvr)/vote_for)
+
                 subtotal_type = 'TO'
                 if subtotal_col >= 0:
                     subtotal_type = vgnamemap.get(cols[subtotal_col],'')
@@ -1425,11 +1428,12 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         RSTrn = "0.0";
                 elif not have_RSReg:
                     (RSUnd, RSOvr) = [int(float(cols[i])) for i in [1,2]]
+                    RSOvr = convRSOvr(RSOvr)
                     total_votes = RSTot = int(float(cols[total_col]))
                     RSCst = total_ballots = int(RSOvr)+int((int(RSTot)+int(RSUnd))/vote_for)
                     if area_id == 'ALLPCTS':
                         # Use computed totals
-                        RSReg = grand_total[subtotal_type][2]
+                        RSReg = grand_total[subtotal_type][2] if grand_total else 0
                     else:
                         RSReg = RSRegSave[subtotal_type].get(area_id,None)
                         if RSReg==None:
@@ -1439,12 +1443,14 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     RSRej = RSExh = 0
                 elif not have_RSCst:
                     (RSReg, RSUnd, RSOvr) = [int(float(cols[i])) for i in [1,2,4]]
+                    RSOvr = convRSOvr(RSOvr)
                     total_votes = RSTot = int(float(cols[total_col]))
                     RSCst = total_ballots = int(RSOvr)+int((int(RSTot)+int(RSUnd))/vote_for)
                     # RSRej not available
                     RSRej = RSExh = 0
                 else:
                     (RSCst, RSReg, RSUnd, RSOvr) = [int(float(cols[i])) for i in [1,2,4,5]]
+                    RSOvr = convRSOvr(RSOvr)
                     total_votes = RSTot = int(float(cols[total_col]))
                     total_ballots = int(RSOvr)+int((int(RSTot)+int(RSUnd))/vote_for)
                     RSRej = str(int(RSCst)-total_ballots)
@@ -1514,7 +1520,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                             RSRegSave_ED[area_id] = RSReg - RSRegSave_MV[area_id]
                             RSReg = RSRegSave_MV[area_id]
                         elif subtotal_type == 'ED':
-                            RSReg = RSRegSave_ED[area_id]
+                            RSReg = RSRegSave_ED[area_id] = RSReg - RSRegSave_MV[area_id]
                         else:
                             RSRegSave_TO[area_id] = RSReg
                         #print(f"{subtotal_type}:RSRegSave_MV[{area_id}]={RSRegSave_MV[area_id]}/{RSReg}")
@@ -1651,7 +1657,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     stats.extend([int(float(cols[i])) for i in candidx])
 
                     if card:
-                        CardTurnOut[card][subtotal_type][area_id] = RSCst
+                        CardTurnOut[card-1][subtotal_type][area_id] = RSCst
 
                     if area_id.startswith("PCT") and (
                         subtotal_col <0 or

@@ -17,6 +17,7 @@ import re
 import urllib.request
 import argparse
 from shutil import copyfileobj
+from tsvio import TSVReader
 
 DESCRIPTION = """\
 Fetch election results data from sfgov.org Election Results - Detailed Reports.
@@ -194,5 +195,4 @@ print(f'RCV_prefixes={prefixpat}')
 
 prefout = open('resultdata-raw/rcv_prefixes.txt','w');
 prefout.write(prefixpat);
-
 
