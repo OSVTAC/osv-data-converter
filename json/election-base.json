@@ -15,7 +15,7 @@
             "heading": "American Independent Crossover",
             "contest_party_crossover": true,
             "name": {
-                "en": "American Independent Crossover",
+                "en": "American Independent Crossover"
             }
         },
         {
@@ -33,7 +33,7 @@
             "heading": "Democratic Crossover",
             "contest_party_crossover": true,
             "name": {
-                "en": "Democratic",
+                "en": "Democratic Crossover"
             }
         },
         {
@@ -61,10 +61,7 @@
             "heading": "Libertarian Crossover",
             "contest_party_crossover": true,
             "name": {
-                "en": "Libertarian",
-                "es": "Libertario",
-                "tl": "Libertaryan",
-                "zh": "自由黨"
+                "en": "Libertarian Crossover"
             }
         },
         {
