@@ -29,6 +29,7 @@ Convert the turnout-raw/vbmprecinct.tsv into:
 * pctsdist.tsv - Precinct groups with list of Summary areas
 
 Group codes:
+RG = Total (VBM+ED) registration
 IS = VBM ballots issued
 RT = VBM ballots returned
 AC = VBM ballots accepted
@@ -88,12 +89,27 @@ sdistpct = {}
 pctsdist = {}
 sdisttotal = {}
 
-partyCodeHeader = "TO|AI|DEM|GRN|LIB|PF|REP|NPP"
+partyNames = {
+    'AI':'American Independent',
+    'DEM':'Democratic',
+    'GRN':'Green',
+    'LIB':'Libertarian',
+    'PF':'Peace and Freedom',
+    'REP':'Republican',
+    'NPP':'No Party Preference',
+    }
+partyName2ID = {v:k for k,v in partyNames.items()}
+partyName2ID['*TOTAL*'] = 'TO'
+partyName2ID['Non-Partisan'] = 'NPP'
+
+
+partyCodeHeader = "TO|AI|AINPP|DEM|DEMNPP|GRN|LIB|LIBNPP|PF|REP|NPP"
 partyCodes = partyCodeHeader.split('|')
-partyHeadings = "|American_Independent_|Democratic_|Libertarian_|Peace_&_Freedom_|Republican_|No_Party_Preference_".split('|')
+partyHeadings = "|American_Independent_|No_Party_Preference_(AI)_|Democratic_|No_Party_Preference_(DEM)_|Green_|Libertarian_|No_Party_Preference_(LIB)_|Peace_&_Freedom_|Republican_|No_Party_Preference_".split('|')
 
 groupCodes = "IS|RT|AC|PN|CH".split('|')
 groupHeadings = "Issued|Returned|Accepted|Pending|Challenged".split('|')
+groupCodes2 = ['RG']+groupCodes
 
 VBM_header = "VotingPrecinctID|VotingPrecinctName|MailBallotPrecinct|BalType"\
     "|Assembly|Congressional|Senatorial|Supervisorial|Issued"\
@@ -120,9 +136,12 @@ VBM_header = "VotingPrecinctID|VotingPrecinctName|MailBallotPrecinct|BalType"\
     "|No_Party_Preference_(AI)_Challenged|No_Party_Preference_(LIB)_Challenged"\
     "|No_Party_Preference_(DEM)_Challenged"
 
+REGISTRATION_header = "PrecinctName|PrecinctExternalId|ElectorGroupName"\
+    "|ElectorGroupExternalId|Count"
+
 def addGroupCols(area:str):
     if area not in sdisttotal:
-        sdisttotal[area]=[[0]*len(partyCodes) for i in range(len(groupCodes))]
+        sdisttotal[area]=[[0]*len(partyCodes) for i in range(len(groupCodes2))]
     for i,grouptotals in enumerate(sdisttotal[area]):
         for j,v in enumerate(groupcols[i]):
             grouptotals[j] += int(v)
@@ -133,6 +152,17 @@ def sortkey(k):
     order=ordermap.get(k[0:4],' ')
     return order+k[4:] if len(k)>5 else order+'0'+k[4:]
 
+
+precinctPartyReg = {}
+with ZipFile("resultdata-raw.zip") as rzip:
+    with TSVReader("Registration.txt",opener=rzip,binary_decode=True,
+                   validate_header=REGISTRATION_header) as f:
+        for (PrecinctName, PrecinctExternalId, ElectorGroupName,
+             ElectorGroupExternalId, Count) in f.readlines():
+            party_id = partyName2ID[ElectorGroupName]
+            precinctPartyReg[f"PCT{PrecinctExternalId}:{party_id}"] = Count
+
+
 with ZipFile("turnoutdata-raw.zip") as rzip:
     with TSVReader("vbmprecinct.csv",opener=rzip,binary_decode=True,
                     validate_header=VBM_header) as f:
@@ -142,15 +172,21 @@ with ZipFile("turnoutdata-raw.zip") as rzip:
                    header="area_id|subtotal_type|"+partyCodeHeader) as o:
         for r in VBM_turnout.values():
             pct = r['VotingPrecinctID']
+            pcta = 'PCT'+pct
             groupcols = []
+
+            # Create a pseudo-group for party registration
+            cols = [precinctPartyReg.get(f"{pcta}:{ph}",0) for ph in partyCodes]
+            o.addline(pcta,'RG',*cols)
+            groupcols.append(cols)
+
 
             for gh,group in zip(groupHeadings,groupCodes):
                 cols = [r[ph+gh] for ph in partyHeadings]
-                o.addline("PCT"+pct,group,*cols)
+                o.addline(pcta,group,*cols)
                 groupcols.append(cols)
 
             addGroupCols('ALLPCTS')
-            pcta = 'PCT'+pct
             sdists = []
             # Create reverse map precinct to summary groups
             for h,c in distHeadMap.items():
@@ -175,7 +211,7 @@ with ZipFile("turnoutdata-raw.zip") as rzip:
         # Output district summaries
 
         for area,rows in sorted(sdisttotal.items(), key=sortkey):
-            for i,group in enumerate(groupCodes):
+            for i,group in enumerate(groupCodes2):
                 line = o.joinline(area,group,*(sdisttotal[area][i]))
                 if area=='CONG13':
                     continue

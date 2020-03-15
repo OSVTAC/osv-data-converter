@@ -163,6 +163,7 @@ for lineb in content:
         m = re.search(r'href="([^"<>]*/20\d{6}/data/(Registration_20\d\d\d\d\d\d.txt))"', line)
         if m:
             url, filename = m.groups()
+            filename = re.sub(r'_20\d\d\d\d\d\d\.','.',filename)
             processfile(url, None, filename)
         continue
 

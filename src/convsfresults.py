@@ -43,7 +43,8 @@ from translations import Translator
 
 # Library imports
 from datetime import datetime
-from collections import OrderedDict, namedtuple
+from collections import OrderedDict, namedtuple, defaultdict
+
 from typing import List, Pattern, Match, Dict, Set, TextIO
 from zipfile import ZipFile
 
@@ -140,6 +141,7 @@ VOTING_STATS = OrderedDict([
     ('RSRej', 'Ballots Rejected'),  # Not countable
     ('RSUnc', 'Ballots Uncounted'), # Not yet counted or needing adjudication
     ('RSWri', 'Writein Votes'),     # Write-in candidates not explicitly listed
+    ('RSBla', 'Blank Ballots'),     # Ballots with no choices in this contest
     ('RSUnd', 'Undervotes'),        # Blank votes or additional votes not made
     ('RSOvr', 'Overvotes'),         # Possible votes rejected by overvoting
     ('RSExh', 'Exhausted Ballots')  # All RCV choices were eliminated (RCV only)
@@ -276,22 +278,19 @@ def dict_append(d:Dict, k, v):
     """
     Same as d[k].append(v) but works if k is not in d
     """
-    if k not in d: d[k] =[]
-    d[k].append(v)
+    d.setdefault(k,[]).append(v)
 
 def dict_extend(d:Dict, k, v):
     """
     Same as d[k].extend(v) but works if k is not in d
     """
-    if k not in d: d[k] =[]
-    d[k].extend(v)
+    d.setdefault(k,[]).extend(v)
 
 def dict_add(d:Dict, k, v:int):
     """
     Same as d[k]+=v but works if k is not in d
     """
-    if k not in d: d[k] = 0
-    d[k] += v
+    d[k] = d.get(k,0) + v
 
 def unpack(
     fmt:str,     # Format string
@@ -445,7 +444,7 @@ def newtsvlineu(
         foundHash[args[0]] = line
         datalist.append(line)
     elif line !=foundHash[args[0]]:
-        print("{errorPrefix} {linenum}:\n {foundHash[args[0]]}  {line}" )
+        print(f"{errorPrefix} {linenum}:\n {foundHash[args[0]]}  {line}" )
 
 def decodeline(line, encoding=SF_ENCODING):
     global linenum
@@ -837,15 +836,12 @@ EWM_turnout = {}
 with ZipFile("turnoutdata-raw.zip") as rzip:
     zipfilenames = get_zip_filenames(rzip)
 
-    if "vbmprecinct.csv" in zipfilenames:
-        with TSVReader("vbmprecinct.csv",opener=rzip,binary_decode=True,
-                       validate_header=VBM_header) as f:
-            VBM_turnout = f.loaddict()
 
     if "ewmr057.psv" in zipfilenames:
         with TSVReader("ewmr057.psv",opener=rzip,binary_decode=True,
                        validate_header=EWM_header) as f:
             EWM_turnout = f.loaddict()
+
 
 # Save registration by subtotal and precinct
 # RSRegSave['MV']['PCT1101'] has registration for vote by mail in precinct 1101
@@ -856,8 +852,42 @@ RSRegSave:RS_VG_Table = dict(TO={},ED={},MV={})
 RSRegSave_MV:RS_Area_Table = RSRegSave['MV']
 RSRegSave_ED:RS_Area_Table= RSRegSave['ED']
 RSRegSave_TO:RS_Area_Table = RSRegSave['TO']
+RSCstSave_MV:RS_Area_Table = {} # VBM returned
 
 RSRegSave_MV['CONG13']=RSRegSave_ED['CONG13']=RSRegSave_TO['CONG13']=0
+
+CrossoverParties = {'DEM','AI','LIB','NPP'}
+
+
+if os.path.isfile("vbmparty.tsv"):
+    with TSVReader("vbmparty.tsv") as f:
+        # cols area_id|subtotal_type|TO|AI|...
+        # f.header is contains party headings for cols[3:]
+        partyHeaders = f.header[3:]
+        print(f"Partyheaders={partyHeaders}")
+        for cols in f.readlines():
+            if cols[1]=='RG':
+                rs = RSRegSave_TO
+            elif cols[1]=='IS':
+                rs = RSRegSave_MV
+            elif cols[1]=='RT':
+                rs = RSCstSave_MV
+            else:
+                continue
+            area_id = cols[0]
+            rs[area_id] = int(cols[2])
+            for i, party in enumerate(partyHeaders):
+                rs[area_id+party]=v=int(cols[3+i])
+                if party.endswith('NPP'):
+                    if party != 'NPP':
+                        party = party[:-3]
+                if party in CrossoverParties:
+                    dict_add(rs, area_id+party+'ALL', v)
+
+# Now RSRegSave_MV and RSRegSave_TO have VBM and total registration
+# by area_id or area_id+party suffix. The party+NPP suffix has VBM issued
+# area_id+NPPALL has NPP combined ballots issued and returned. Total
+# issued and returned for crossover parties has a DEMALL etc.
 
 # Vote by mail registration is found in the vbmprecinct.csv along with
 # a breakdown by party and precinct. We save the MV "registration" for
@@ -880,12 +910,6 @@ sdistpct:Dict[Area_Id,List[Area_Id]] = {}
 # that are in ASSM17, eg. NEIG12 is one
 RSRegSummary:Dict[str,Dict[str,Dict[str,int]]] = {}
 
-# Extract the MV registration for each precinct
-vbm_reg_all = 0
-for VotingPrecinctID, d in VBM_turnout.items():
-    v = int(d['Issued'])
-    RSRegSave_MV['PCT'+VotingPrecinctID] = v
-    vbm_reg_all += v
 
 if os.path.isfile("sdistpct.tsv"):
     with TSVReader("sdistpct.tsv",validate_header="area_id|precinct_ids") as f:
@@ -894,10 +918,6 @@ if os.path.isfile("sdistpct.tsv"):
             precincts = ['PCT'+s for s in precinct_ids.split()]
             # Save the precinct list for contest-district tabulation
             sdistpct[area_id] = precincts
-            reg = 0
-            for p in precincts:
-                reg += RSRegSave_MV[p]
-            RSRegSave_MV[area_id] = reg
 
 if  os.path.isfile("pctsdist.tsv"):
     with TSVReader("pctsdist.tsv",validate_header="precinct_ids|area_ids") as f:
@@ -907,13 +927,6 @@ if  os.path.isfile("pctsdist.tsv"):
             for pct in precinct_ids.split():
                 sdistpct['PCT'+pct] = sdists
 
-# Extract the MV registration for each precinct
-for pcta, v in RSRegSave_MV.items():
-    if not pcta.startswith('PCT'):
-        break
-    for sdist in sdistpct[pcta]:
-        dict_add(RSRegSave_MV, sdist, v)
-RSRegSave_MV['ALLPCTS'] = vbm_reg_all
 
 # Process the downloaded SF results stored in resultdata-raw.zip
 with ZipFile("resultdata-raw.zip") as rzip:
@@ -963,11 +976,13 @@ with ZipFile("resultdata-raw.zip") as rzip:
             append_sha_list(sovfile)
             contest_id = 'TURNOUT'
             precincts_reported_pat = re2(r'Precincts Reported: (\d+) of (\d+)')
+            party_suffix_pat = re2(r' *␤(\w+)')
             linenum = 0
             for line in f:
                 line = decodeline(line, SF_SOV_ENCODING)
                 # contest_party is appended to the contest name, so trim it!
-                line = re.sub(r' +␤\w+','',line)
+                line =  party_suffix_pat.sub('',line)
+                contest_party = party_suffix_pat[1]
                 if precincts_reported_pat.match(line):
                     if not contest_id:
                         print(f"summary contest name mismatch {linenum}:{line}")
@@ -1056,6 +1071,8 @@ with ZipFile("resultdata-raw.zip") as rzip:
         skip_lines = 0
         skip_to_category = next_is_district = False
         contest_name=''
+        withzero = args.withzero
+        zero_voter_contest = False
 
         if args.debug:
             print(f"skip_area_pat={skip_area_pat_str}")
@@ -1107,7 +1124,8 @@ with ZipFile("resultdata-raw.zip") as rzip:
                 elif contest_header_pat.match(line):
                     contest_name, vote_for = contest_header_pat.groups()
                     # Trim duplicate party suffix
-                    contest_name = re.sub(r' *␤[A-Z]{1,3}$','',contest_name)
+                    contest_name =  party_suffix_pat.sub('',contest_name)
+                    contest_party = party_suffix_pat[1]
                     contest_order += 1
                     contest_order_str = str(contest_order).zfill(3)
                     if not vote_for:
@@ -1136,6 +1154,11 @@ with ZipFile("resultdata-raw.zip") as rzip:
                                            contest_id_ext,
                                 contest_name, vote_for, max_ranked)
                     contlist.append(contline)
+                    if re.match(r'.*House of Rep District 13',contest_name):
+                        #print(f"**zero_voter_contest=True {contest_name}")
+                        zero_voter_contest = True
+                    else:
+                        zero_voter_contest = False
                 else:
                     raise FormatError(f"sov contest name mismatch {linenum}:{line}")
 
@@ -1435,9 +1458,13 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         # Use computed totals
                         RSReg = grand_total[subtotal_type][2] if grand_total else 0
                     else:
-                        RSReg = RSRegSave[subtotal_type].get(area_id,None)
+                        area_party = area_id
+                        if contest_party:
+                            area_party+=contest_party
+                        RSReg = RSRegSave[subtotal_type].get(area_party,None)
                         if RSReg==None:
-                            RSReg = RSRegSave['TO'][area_id]
+                            #print(f"RSRegSave[{subtotal_type}][{area_party}]={RSRegSave[subtotal_type].get(area_party,None)}")
+                            RSReg = RSRegSave_TO.get(area_party,RSRegSave_TO[area_id])
                     # RSRej not available
                     #print(f"{area_id}:{subtotal_type} {RSCst}/{RSReg}")
                     RSRej = RSExh = 0
@@ -1450,14 +1477,21 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     RSRej = RSExh = 0
                 else:
                     (RSCst, RSReg, RSUnd, RSOvr) = [int(float(cols[i])) for i in [1,2,4,5]]
-                    RSOvr = convRSOvr(RSOvr)
+                    RSOvr = convRSOgitvr(RSOvr)
                     total_votes = RSTot = int(float(cols[total_col]))
                     total_ballots = int(RSOvr)+int((int(RSTot)+int(RSUnd))/vote_for)
                     RSRej = str(int(RSCst)-total_ballots)
                     # RSRej not available
                     RSExh = 0
 
-                no_voter_precinct = RSReg==0 and not (args.withzero or zero_report)
+                RSRegNP = RSRegSave[subtotal_type].get(area_id,
+                                     RSRegSave_TO[area_id])
+                no_voter_precinct = RSRegNP==0 and not (zero_voter_contest or
+                                                      isvbm_precinct or
+                                                      withzero or zero_report)
+
+                #if RSReg==0:
+                    #print(f"no_voter_precinct {no_voter_precinct} {area_id} {contest_party} {subtotal_type}")
 
                 if pct_col_0:
                     pass
@@ -1467,13 +1501,15 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     raise FormatError(f"sov area mismatch {linenum}: {line}")
                 elif skip_area:
                     continue
+                elif zero_voter_contest and readDictrict:
+                    continue
 
-                if cons_precincts:
+                if cons_precincts and not contest_party:
                     newtsvlineu(foundpctcons, pctcons,
                                 "Mismatched Precinct Consolidation",
                                 precinct_id, precinct_name,
                                 boolstr(isvbm_precinct),
-                                boolstr(no_voter_precinct),
+                                boolstr(RSReg==0),
                                 cons_precincts)
                     cons_precincts = ''
                 # Map the subtotal_type
@@ -1516,13 +1552,29 @@ with ZipFile("resultdata-raw.zip") as rzip:
                 if in_turnout:
                     if area_id in RSRegSave_MV:
                         #Convert total registration to MV & ED, MV is first
-                        if subtotal_type == 'MV':
+                        if isvbm_precinct:
+                            if subtotal_type == 'ED':
+                                RSReg = RSRegSave_ED[area_id] = 0
+                                for p in Party_IDs:
+                                    RSRegSave_ED[area_id+p] = 0
+                            else:
+                                RSRegSave_MV[area_id] = RSRegSave_TO[area_id] = RSReg
+                        elif subtotal_type == 'MV':
                             RSRegSave_ED[area_id] = RSReg - RSRegSave_MV[area_id]
                             RSReg = RSRegSave_MV[area_id]
                         elif subtotal_type == 'ED':
                             RSReg = RSRegSave_ED[area_id] = RSReg - RSRegSave_MV[area_id]
                         else:
                             RSRegSave_TO[area_id] = RSReg
+                            for p in Party_IDs:
+                                area_party = area_id+p
+                                RSRegSave_ED[area_party] = RSRegSave_TO[area_party] - RSRegSave_MV[area_party]
+
+                        if subtotal_type == 'MV' or subtotal_type == 'ED':
+                             for p in Party_IDs:
+                                area_party = area_id+p
+                                RSRegSave_ED[area_party] = RSRegSave_TO[area_party] - RSRegSave_MV[area_party]
+
                         #print(f"{subtotal_type}:RSRegSave_MV[{area_id}]={RSRegSave_MV[area_id]}/{RSReg}")
                     else:
                         RSRegSave[subtotal_type][area_id] = RSReg

@@ -49,6 +49,7 @@ from tsvio import TSVReader
 
 from datetime import datetime
 from collections import OrderedDict
+from collections import defaultdict
 from typing import Union, List, Pattern, Match, Dict, Tuple
 
 DESCRIPTION = """\
@@ -410,7 +411,10 @@ def decode_JSON_String(s:str)->str:
     Converts HTML encoding within the string back into UTF.
     This might be upgraded later to accomodate included HTML tags so would
     preserve &amp; &gt; &lt;.
+
     """
+    # Clean bogus html
+    s = re.sub(r'<p><br></p>','',s, flags=re.I)
     return html.unescape(s)
 
 def get_dict_entry(node, keylist:List[str]):
@@ -436,7 +440,7 @@ def form_i18n_str(
         if zh.startswith(en+' '):
             # The zh includes english
             zh = zh[len(en)+1:]
-        translations['zh'] = zh
+        translations['zh'] = decode_JSON_String(zh)
     for lang,v in translations.items():
          foundlang.add(lang)
          translations[lang] = decode_JSON_String(v)
@@ -496,11 +500,19 @@ def conv_titles(titles):
     """
     return [form_i18n_str(t) for t in titles if t.get('value',"")!=""]
 
-def merge_titles(titles:List[Dict])->str:
+def merge_titles(
+        titles:List[Dict],	# List of itext title/subtitle
+        base_title:str=None	# Optional replacement for title[0]
+        )->str:
     """
     Merge english with ~ separator
     """
-    return '~'.join([t['en'] for t in titles])
+    if not base_title:
+        if  not (titles and titles[0]):
+            return ""
+        base_title = titles[0]['en']
+
+    return '~'.join([base_title]+[t['en'] for t in titles[1:]])
 
 def clean_paragraphs(paragraphs:List[Dict]):
     """
@@ -626,11 +638,16 @@ def conv_bt_json(j:Dict, bt:str):
         ilast = len(titles)-1
         if ilast>0 and titles[ilast]['en'].startswith('Vote for'):
             vote_for_istr = titles.pop()
-            try:
-                vote_for = word2num[re.search(r'(\w+)$',
-                                     vote_for_istr['en']).group(1).lower()]
-            except:
-                vote_for = ""
+            m = re.search(r'(\d+)$',vote_for_istr['en'])
+            if m:
+                vote_for = int(m.group(1))
+            else:
+                try:
+                    vote_for = word2num[re.search(r'(\w+)$',
+                                        vote_for_istr['en']).group(1).lower()]
+                except:
+                    print(f"Failed to match number in {vote_for_istr['en']}")
+                    vote_for = ""
         else:
             vote_for_istr = None
             vote_for = ""
@@ -653,7 +670,7 @@ def conv_bt_json(j:Dict, bt:str):
             if len(titles)==2 and titles[1]['en'].startswith('Vote your first,'):
                 del titles[1]
 
-        title = merge_titles(titles)
+        contest_name = title = merge_titles(titles)
         text = merge_titles(paragraphs)
 
         if title=='' and len(text)<20:
@@ -740,6 +757,7 @@ def conv_bt_json(j:Dict, bt:str):
                     "name": name}
 
                 contest_name = name['en']
+
                 if (config.short_description and
                     contest_name in config.short_description):
                     contj['short_description'] = str2istr(
@@ -749,6 +767,9 @@ def conv_bt_json(j:Dict, bt:str):
                     contj['ballot_subtitle'] = titles[1]
                 if vote_for_istr:
                     contj['vote_for_msg'] = vote_for_istr
+                    contj['votes_allowed'] = vote_for
+                else:
+                    contj['votes_allowed'] = 1
                 if isrcv:
                     contj['max_ranked'] = vote_for
                     contj['number_elected'] = 1
@@ -790,7 +811,7 @@ def conv_bt_json(j:Dict, bt:str):
         else:
             contest_candidate = ""
 
-        title_party = title
+        title_party = contest_name # Use mapped name, e.g. for propositions
         m = eval_config_pattern(title, config.contest_party_pats)
         if (m and
             "options" in box and
@@ -812,6 +833,8 @@ def conv_bt_json(j:Dict, bt:str):
 
         url_state_results = eval_config_pattern_remap(title_party,
                                 config.url_state_results_map)
+        if not found:
+            print(f"url={url_state_results} for '{title_party}'")
         if url_state_results and not found:
             #print(f"url_state_results {title_party}={url_state_results}")
             contj['url_state_results'] = url_state_results
@@ -886,6 +909,9 @@ def conv_bt_json(j:Dict, bt:str):
                         }
                     if party_istr:
                         candj['candidate_party'] = party_istr
+                        party_id = partyName2ID[party]
+                        if party_id:
+                            candj['candidate_party_id'] = party_id
                     if designation_istr:
                         candj['ballot_designation'] = designation_istr
                     contj['choices'].append(candj)
@@ -920,13 +946,7 @@ def conv_bt_json(j:Dict, bt:str):
                         contj['result_style'] = 'EMS'
 
 
-            if external_id not in candorder:
-                candorder[external_id] = {}
-            if candlist not in candorder[external_id]:
-                candorder[external_id][candlist] = order = []
-            else:
-                order = candorder[external_id][candlist]
-            order.append(bt)
+            candorder.setdefault(external_id,{}).setdefault(candlist,[]).append(bt)
             # End Contest with a list of choices
         elif not found and contest_type != "header" and contest_type != "text":
             # Contest with no choices
@@ -970,6 +990,16 @@ election_date = None
 
 approval_required_by_title = {}  # Approval required by measure title
 approval_required_by_contest = {}
+
+# For now use a fixed path, and load the json base template
+path = os.path.dirname(__file__)+f"/../json/election-base{config.election_base_suffix}.json"
+with open(path) as f:
+    basejson = json.load(f)
+# Get a party map
+partyName2ID = defaultdict(lambda: '')
+for p in basejson['party_names']:
+    partyName2ID[p['heading']]=p['_id']
+
 
 
 # Invert the approval_required to make a lookup
@@ -1119,9 +1149,7 @@ if os.path.isfile("candlist-fix.tsv"):
                 candj['ballot_designation'] = str2istr(designation)
             if cand_type == "writein":
                 candj['is_writein'] = True
-            if mapped_id  not in added_contcand:
-                added_contcand[mapped_id] = []
-            added_contcand[mapped_id].append(candj)
+            added_contcand.setdefault(mapped_id,[]).append(candj)
 
 writeinfiles = [
     "../resultdata/CandidateManifest.tsv",
@@ -1153,10 +1181,8 @@ for wiformat in range(1,len(writeinfiles)):
                 if is_writein_candidate != 'Y':
                     continue;
             seq += 1
-            if ContestId not in added_contcand:
-                added_contcand[ContestId] = []
             newtsvline(writein_candlines,ContestId,seq,Id, Description)
-            added_contcand[ContestId].append({
+            added_contcand.setdefault(ContestId,[]).append({
                 "_id": Id,
                 "_id_ext": ExternalId,
                 "ballot_title": str2istr(Description),
@@ -1329,12 +1355,9 @@ outj = {
 if config.url_state_results:
     outj["election"]["url_state_results"] = config.url_state_results
 
-# For now use a fixed path
-path = os.path.dirname(__file__)+f"/../json/election-base{config.election_base_suffix}.json"
-with open(path) as f:
-    basejson = json.load(f)
 
 outj.update(basejson)
+
 
 if not os.path.exists(OUT_DIR):
     os.makedirs(OUT_DIR)

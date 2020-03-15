@@ -113,7 +113,7 @@ class Translator:
                 parampat = [] # List of regex match for each param
                 for p in params:
                     # find regex
-                    rfound = r'*.?' # Map unmatched to anything
+                    rfound = r'.*?' # Map unmatched to anything
                     # Find a regex by matching the param name (HACK)
                     for (idpat, regex) in PARAM_NAME_REGEX:
                         if not idpat.search(p):
@@ -141,9 +141,9 @@ class Translator:
                     patstr = re.sub(r'\{(\d+)\}',
                                 lambda m:(r'('+parampat[int(m.group(1))]+')'),en)
                     pat = re.compile(f'^{patstr}$', flags=re.I)
-                except:
+                except Exception as e:
                     # TODO: Handle this better
-                    print(f"Invalid translation {key} en:{en}")
+                    print(f"Invalid translation {key} en:{en} regex='{patstr}': {e}")
                     continue
 
                 #print(f"Translation pat for {key} = {en} :{istr}")

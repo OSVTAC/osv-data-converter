@@ -95,7 +95,8 @@
     "result_stat_types": [
         {
             "_id": "RSTot",
-            "heading": "Ballots Counted",
+            "heading": "Total Votes",
+            "description": "Number of valid votes included in totals",
             "text": {
                 "_desc": "RSTot: Label for the number of valid votes (i.e. votes for candidates, and not including undervotes and overvotes).",
                 "en": "Total Votes",
@@ -107,6 +108,7 @@
         {
             "_id": "RSVot",
             "heading": "Voters Participating",
+            "description": "Number of voters checking in at a poll site or returning a mail ballot",
             "text": {
                 "_desc": "RSVot",
                 "en": "Voters Participating"
@@ -115,6 +117,7 @@
         {
             "_id": "RSCst",
             "heading": "Ballots Cast",
+            "description": "Number of ballots submitted by votes",
             "text": {
                 "_desc": "RSCst",
                 "en": "Ballots Cast",
@@ -126,6 +129,7 @@
         {
             "_id": "RSCd1",
             "heading": "Card 1 Ballots Cast",
+            "description": "Number of ballot cards 1 submitted by votes",
             "text": {
                 "en": "Card 1 Ballots Cast"
             }
@@ -133,12 +137,14 @@
         {
             "_id": "RSCd2",
             "heading": "Card 2 Ballots Cast",
+            "description": "Number of ballot cards 2 submitted by votes",
             "text": {
                 "en": "Card 2 Ballots Cast"
             }
         },
         {
             "_id": "RSCd3",
+            "description": "Number of ballot cards 3 submitted by votes",
             "heading": "Card 3 Ballots Cast",
             "text": {
                 "en": "Card 3 Ballots Cast"
@@ -147,6 +153,7 @@
         {
             "_id": "RSCd4",
             "heading": "Card 4 Ballots Cast",
+            "description": "Number of ballot cards 4 submitted by votes",
             "text": {
                 "en": "Card 4 Ballots Cast"
             }
@@ -154,6 +161,7 @@
         {
             "_id": "RSCd5",
             "heading": "Card 5 Ballots Cast",
+            "description": "Number of ballot cards 5 submitted by votes",
             "text": {
                 "en": "Card 5 Ballots Cast"
             }
@@ -161,6 +169,7 @@
         {
             "_id": "RSCd6",
             "heading": "Card 6 Ballots Cast",
+            "description": "Number of ballot cards 6 submitted by votes",
             "text": {
                 "en": "Card 6 Ballots Cast"
             }
@@ -168,6 +177,7 @@
         {
             "_id": "RSCd7",
             "heading": "Card 7 Ballots Cast",
+            "description": "Number of ballot cards 7 submitted by votes",
             "text": {
                 "en": "Card 7 Ballots Cast"
             }
@@ -175,6 +185,7 @@
         {
             "_id": "RSCd8",
             "heading": "Card 8 Ballots Cast",
+            "description": "Number of ballot cards 8 submitted by votes",
             "text": {
                 "en": "Card 8 Ballots Cast"
             }
@@ -182,6 +193,7 @@
         {
             "_id": "RSCd9",
             "heading": "Card 9 Ballots Cast",
+            "description": "Number of ballot cards 9 submitted by votes",
             "text": {
                 "en": "Card 9 Ballots Cast"
             }
@@ -189,6 +201,7 @@
         {
             "_id": "RSReg",
             "heading": "Registered Voters",
+            "description": "Number of registerd voters in the election",
             "text": {
                 "_desc": "RSReg",
                 "en": "Registered Voters",
@@ -200,6 +213,7 @@
         {
             "_id": "RSEli",
             "heading": "Eligible Voters",
+            "description": "Estimated number of people who may register to vote",
             "text": {
                 "_desc": "RSEli: Label for the number of people eligible to register to vote.",
                 "en": "Eligible Voters"
@@ -208,6 +222,7 @@
         {
             "_id": "RSTrn",
             "heading": "Voter Turnout",
+            "description": "Percentage of voters participating / registered",
             "is_percent": true,
             "text": {
                 "_desc": "RSTrn: Label for the number of people that voted",
@@ -217,6 +232,7 @@
         {
             "_id": "RSRej",
             "heading": "Ballots Rejected",
+            "description": "Ballots cast that are challenged or rejected",
             "text": {
                 "_desc": "RSRej",
                 "en": "Ballots Rejected"
@@ -225,6 +241,7 @@
         {
             "_id": "RSUnc",
             "heading": "Ballots Uncounted",
+            "description": "Ballots received but not included in totals",
             "text": {
                 "_desc": "RSUnc",
                 "en": "Ballots Uncounted"
@@ -233,14 +250,24 @@
         {
             "_id": "RSWri",
             "heading": "Writein Votes",
+            "description": "Undetermined write-in votes",
             "text": {
                 "_desc": "RSWri: Label for the number of write-in votes",
                 "en": "Write-in Votes"
             }
         },
         {
+            "_id": "RSIWr",
+            "heading": "Invalid Writein Votes",
+            "description": "Write-in vote with a blank or ineligible candidate name",
+            "text": {
+                "en": "Invalid Write-in Votes"
+            }
+        },
+        {
             "_id": "RSUnd",
             "heading": "Undervotes",
+            "description": "Number of votes allowed not voted, excluding blank ballots reported",
             "text": {
                 "_desc": "RSUnd",
                 "en": "Undervotes",
@@ -250,8 +277,17 @@
             }
         },
         {
+            "_id": "RSBla",
+            "heading": "Blank Ballots",
+            "description": "Number of ballots with no votes selected",
+            "text": {
+                "en": "Blank Ballots"
+            }
+        },
+        {
             "_id": "RSOvr",
             "heading": "Overvotes",
+            "description": "Number of ballots with more votes selected than allowed",
             "text": {
                 "_desc": "RSOvr",
                 "en": "Overvotes",
@@ -263,6 +299,7 @@
         {
             "_id": "RSSki",
             "heading": "Skipped Votes",
+            "description": "Number of votes explicitly marked as skip-this-contest",
             "text": {
                 "_desc": "RSSki",
                 "en": "Skipped Votes"
@@ -271,6 +308,7 @@
         {
             "_id": "RSExh",
             "heading": "Exhausted Ballots",
+            "description": "Number of RCV ballots where all choices are eliminated",
             "text": {
                 "_desc": "RSExh: Exhausted votes, for use in RCV contests.",
                 "en": "Exhausted Ballots"
@@ -286,10 +324,24 @@
             "voting_group_ids": "TO ED MV"
         },
         {
+            "_id": "EMSN",
+            "description": "Plurality N-of-M voting, subtotal by Election Day/VBM",
+            "is_rcv": false,
+            "result_stat_type_ids": "RSReg RSCst RSRej RSOvr RSUnd RSBla RSTot",
+            "voting_group_ids": "TO ED MV"
+        },
+        {
             "_id": "EMSW",
             "description": "Plurality voting, subtotal by Election Day/VBM, with writeins",
             "is_rcv": false,
             "result_stat_type_ids": "RSReg RSCst RSRej RSOvr RSUnd RSTot RSWri",
+            "voting_group_ids": "TO ED MV"
+        },
+        {
+            "_id": "EMSWN",
+            "description": "Pluralityy N-of-M voting, subtotal by Election Day/VBM, with writeins",
+            "is_rcv": false,
+            "result_stat_type_ids": "RSReg RSCst RSRej RSOvr RSUnd RSBla RSTot RSWri",
             "voting_group_ids": "TO ED MV"
         },
         {
@@ -319,123 +371,6 @@
             "is_rcv": false,
             "result_stat_type_ids": "RSReg RSCst RSRej",
             "voting_group_ids": "TO ED MV"
-        }
-    ],
-    "translations": {
-        "ballots_cast": {
-            "en": "Ballots Cast"
-        },
-        "ballots_counted": {
-            "en": "Ballots Counted"
-        },
-        "ballots_rejected": {
-            "en": "Ballots Rejected"
-        },
-        "ballots_uncounted": {
-            "en": "Ballots Uncounted"
-        },
-        "exhausted_ballots": {
-            "en": "Exhausted Ballots"
-        },
-        "no": {
-            "en": "NO",
-            "es": "NO",
-            "tl": "HINDI",
-            "zh": "反對"
-        },
-        "overvotes": {
-            "en": "Overvotes"
-        },
-        "registered_voters": {
-            "en": "Registered Voters"
-        },
-        "undervotes": {
-            "en": "Undervotes"
-        },
-        "voter_turnout": {
-            "en": "Voter Turnout"
-        },
-        "writein": {
-            "en": "Write-In",
-            "es": "NO LISTADO",
-            "tl": "ISINUSULAT-LAMANG",
-            "zh": "補寫候選人"
-        },
-        "writein_votes": {
-            "en": "Writein Votes"
-        },
-        "yes": {
-            "en": "YES",
-            "es": "SÍ",
-            "tl": "OO",
-            "zh": "贊成"
-        }
-    },
-    "voting_groups": [
-        {
-            "_id": "TO",
-            "heading": "Total",
-            "text": {
-                "_desc": "TO",
-                "en": "Total",
-                "es": "Total",
-                "tl": "Kabuuan",
-                "zh": "總共"
-            }
-        },
-        {
-            "_id": "ED",
-            "heading": "Election Day",
-            "text": {
-                "_desc": "ED",
-                "en": "Election Day",
-                "es": "Día de las Elecciones",
-                "tl": "Araw ng Eleksyon",
-                "zh": "投票日"
-            }
-        },
-        {
-            "_id": "MV",
-            "heading": "Vote By Mail",
-            "text": {
-                "_desc": "MV",
-                "en": "Vote By Mail",
-                "es": "Voto por correo",
-                "tl": "Pagboto sa pamamagitan ng Koreo",
-                "zh": "郵寄投票"
-            }
-        },
-        {
-            "_id": "EV",
-            "heading": "Early Voting",
-            "text": {
-                "_desc": "EV",
-                "en": "Early Voting"
-            }
-        },
-        {
-            "_id": "IA",
-            "heading": "In-County",
-            "text": {
-                "_desc": "IA",
-                "en": "In-County"
-            }
-        },
-        {
-            "_id": "XA",
-            "heading": "Other Counties",
-            "text": {
-                "_desc": "XA",
-                "en": "Other Counties"
-            }
-        },
-        {
-            "_id": "PV",
-            "heading": "Provisional Voting",
-            "text": {
-                "_desc": "PV",
-                "en": "Provisional Voting"
-            }
         }
     ]
 }
