@@ -372,5 +372,72 @@
             "result_stat_type_ids": "RSReg RSCst RSRej",
             "voting_group_ids": "TO ED MV"
         }
+    ],
+"voting_groups": [
+        {
+            "_id": "TO",
+            "heading": "Total",
+            "text": {
+                "_desc": "TO",
+                "en": "Total",
+                "es": "Total",
+                "tl": "Kabuuan",
+                "zh": "總共"
+            }
+        },
+        {
+            "_id": "ED",
+            "heading": "Election Day",
+            "text": {
+                "_desc": "ED",
+                "en": "Election Day",
+                "es": "Día de las Elecciones",
+                "tl": "Araw ng Eleksyon",
+                "zh": "投票日"
+            }
+        },
+        {
+            "_id": "MV",
+            "heading": "Vote By Mail",
+            "text": {
+                "_desc": "MV",
+                "en": "Vote By Mail",
+                "es": "Voto por correo",
+                "tl": "Pagboto sa pamamagitan ng Koreo",
+                "zh": "郵寄投票"
+            }
+        },
+        {
+            "_id": "EV",
+            "heading": "Early Voting",
+            "text": {
+                "_desc": "EV",
+                "en": "Early Voting"
+            }
+        },
+        {
+            "_id": "IA",
+            "heading": "In-County",
+            "text": {
+                "_desc": "IA",
+                "en": "In-County"
+            }
+        },
+        {
+            "_id": "XA",
+            "heading": "Other Counties",
+            "text": {
+                "_desc": "XA",
+                "en": "Other Counties"
+            }
+        },
+        {
+            "_id": "PV",
+            "heading": "Provisional Voting",
+            "text": {
+                "_desc": "PV",
+                "en": "Provisional Voting"
+            }
+        }
     ]
 }

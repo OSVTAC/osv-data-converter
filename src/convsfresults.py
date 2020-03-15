@@ -864,7 +864,7 @@ if os.path.isfile("vbmparty.tsv"):
         # cols area_id|subtotal_type|TO|AI|...
         # f.header is contains party headings for cols[3:]
         partyHeaders = f.header[3:]
-        print(f"Partyheaders={partyHeaders}")
+        #print(f"Partyheaders={partyHeaders}")
         for cols in f.readlines():
             if cols[1]=='RG':
                 rs = RSRegSave_TO
@@ -1484,8 +1484,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     # RSRej not available
                     RSExh = 0
 
-                RSRegNP = RSRegSave[subtotal_type].get(area_id,
-                                     RSRegSave_TO[area_id])
+                RSRegNP = RSRegSave_TO[area_id]
                 no_voter_precinct = RSRegNP==0 and not (zero_voter_contest or
                                                       isvbm_precinct or
                                                       withzero or zero_report)
