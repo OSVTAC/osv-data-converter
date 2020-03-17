@@ -842,7 +842,6 @@ with ZipFile("turnoutdata-raw.zip") as rzip:
                        validate_header=EWM_header) as f:
             EWM_turnout = f.loaddict()
 
-
 # Save registration by subtotal and precinct
 # RSRegSave['MV']['PCT1101'] has registration for vote by mail in precinct 1101
 RS_Area_Table = Dict[Area_Id,int]
@@ -859,24 +858,39 @@ RSRegSave_MV['CONG13']=RSRegSave_ED['CONG13']=RSRegSave_TO['CONG13']=0
 CrossoverParties = {'DEM','AI','LIB','NPP'}
 
 
-if os.path.isfile("vbmparty.tsv"):
-    with TSVReader("vbmparty.tsv") as f:
-        # cols area_id|subtotal_type|TO|AI|...
+# Load turnout by party
+turnoutfile = f'{OUT_DIR}/turnout.tsv'
+partyTurnoutColumns = []
+if os.path.isfile(turnoutfile):
+    with TSVReader(turnoutfile) as f:
+        # cols area_id|subtotal_type|result_stat|ALL|AI|...
         # f.header is contains party headings for cols[3:]
         partyHeaders = f.header[3:]
+        partyTurnout = [ [] for p in partyHeaders]
         #print(f"Partyheaders={partyHeaders}")
         for cols in f.readlines():
-            if cols[1]=='RG':
-                rs = RSRegSave_TO
-            elif cols[1]=='IS':
+            area_id, subtotal_type, result_stat = cols[:3]
+            if area_id=='ALLPCTS':
+                # Copy transposed stats by party
+                partyTurnoutColumns.append(f"{subtotal_type}~{result_stat}")
+                for i,v in enumerate(cols[3:]):
+                    partyTurnout[i].append(int(v))
+
+            if result_stat=='RSReg':
+                if subtotal_type=='TO':
+                    rs = RSRegSave_TO
+                else:
+                    # Skip ED
+                    continue
+            elif result_stat=='RSIss':
                 rs = RSRegSave_MV
-            elif cols[1]=='RT':
+            elif result_stat=='RSCst':
                 rs = RSCstSave_MV
             else:
                 continue
-            area_id = cols[0]
-            rs[area_id] = int(cols[2])
             for i, party in enumerate(partyHeaders):
+                if party=='ALL':
+                    party=''
                 rs[area_id+party]=v=int(cols[3+i])
                 if party.endswith('NPP'):
                     if party != 'NPP':
@@ -1631,7 +1645,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         if RSCst != total_precinct_ballots+total_mail_ballots:
                             print(f"Turnout discrepancy {RSCst} != {total_precinct_ballots+total_mail_ballots} ({total_precinct_ballots}+{total_mail_ballots})")
                         if have_EDMV:
-                            results_json['turnout'] = {
+                            js_turnout = results_json['turnout'] = {
                             "_id": "TURNOUT",
                             "no_voter_precincts": [nv_pctlist],
                             "precincts_reporting": int(processed_done),
@@ -1663,7 +1677,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                             ]
                             }
                         else:
-                            results_json['turnout'] = {
+                            js_turnout = results_json['turnout'] = {
                             "_id": "TURNOUT",
                             "no_voter_precincts": [nv_pctlist],
                             "precincts_reporting": int(processed_done),
@@ -1693,7 +1707,13 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         }
                         # Unused: "reporting_time": report_time_str,
 
-
+                        if partyTurnoutColumns:
+                            js_turnout['party_turnout_results_ids'] = partyTurnoutColumns
+                            js_turnout['party_turnout'] = [
+                                    {'party_id':party_id,
+                                    'results': partyTurnout[i] }
+                                    for i, party_id in enumerate(partyHeaders)
+                                ]
                     continue
                 else:
                     if hasrcv:

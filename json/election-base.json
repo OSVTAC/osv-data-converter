@@ -19,6 +19,13 @@
             }
         },
         {
+            "_id": "AIALL",
+            "heading": "American Independent Plus Crossover",
+            "name": {
+                "en": "American Independent Plus Crossover"
+            }
+        },
+        {
             "_id": "DEM",
             "heading": "Democratic",
             "name": {
@@ -34,6 +41,13 @@
             "contest_party_crossover": true,
             "name": {
                 "en": "Democratic Crossover"
+            }
+        },
+        {
+            "_id": "DEMALL",
+            "heading": "Democratic Plus Crossover",
+            "name": {
+                "en": "Democratic Plus Crossover"
             }
         },
         {
@@ -65,6 +79,13 @@
             }
         },
         {
+            "_id": "LIBALL",
+            "heading": "Libertarian Plus Crossover",
+            "name": {
+                "en": "Libertarian Plus Crossover"
+            }
+        },
+        {
             "_id": "PF",
             "heading": "Peace & Freedom",
             "name": {
@@ -85,8 +106,36 @@
             }
         },
         {
+            "_id": "OTH",
+            "heading": "Other Unspecified Party",
+            "name": {
+                "en": "Other Unspecified Party"
+            }
+        },
+        {
+            "_id": "UNK",
+            "heading": "Unknown Party",
+            "name": {
+                "en": "Unknown Party"
+            }
+        },
+        {
+            "_id": "ALL",
+            "heading": "All Parties Combined",
+            "name": {
+                "en": "All Parties Combined"
+            }
+        },
+        {
             "_id": "NPP",
             "heading": "No Party Preference",
+            "name": {
+                "en": "No Party Preference"
+            }
+        },
+        {
+            "_id": "NPPALL",
+            "heading": "No Party Preference Including Crossover",
             "name": {
                 "en": "No Party Preference"
             }
@@ -98,7 +147,6 @@
             "heading": "Total Votes",
             "description": "Number of valid votes included in totals",
             "text": {
-                "_desc": "RSTot: Label for the number of valid votes (i.e. votes for candidates, and not including undervotes and overvotes).",
                 "en": "Total Votes",
                 "es": "Total",
                 "tl": "Kabuuan",
@@ -110,7 +158,6 @@
             "heading": "Voters Participating",
             "description": "Number of voters checking in at a poll site or returning a mail ballot",
             "text": {
-                "_desc": "RSVot",
                 "en": "Voters Participating"
             }
         },
@@ -119,7 +166,6 @@
             "heading": "Ballots Cast",
             "description": "Number of ballots submitted by votes",
             "text": {
-                "_desc": "RSCst",
                 "en": "Ballots Cast",
                 "es": "Votos",
                 "tl": "Mga Inihulog na Balota",
@@ -203,7 +249,6 @@
             "heading": "Registered Voters",
             "description": "Number of registerd voters in the election",
             "text": {
-                "_desc": "RSReg",
                 "en": "Registered Voters",
                 "es": "Electores inscritos",
                 "tl": "Rehistradong Botante",
@@ -215,7 +260,6 @@
             "heading": "Eligible Voters",
             "description": "Estimated number of people who may register to vote",
             "text": {
-                "_desc": "RSEli: Label for the number of people eligible to register to vote.",
                 "en": "Eligible Voters"
             }
         },
@@ -225,7 +269,6 @@
             "description": "Percentage of voters participating / registered",
             "is_percent": true,
             "text": {
-                "_desc": "RSTrn: Label for the number of people that voted",
                 "en": "Voter Turnout"
             }
         },
@@ -234,7 +277,6 @@
             "heading": "Ballots Rejected",
             "description": "Ballots cast that are challenged or rejected",
             "text": {
-                "_desc": "RSRej",
                 "en": "Ballots Rejected"
             }
         },
@@ -243,7 +285,6 @@
             "heading": "Ballots Uncounted",
             "description": "Ballots received but not included in totals",
             "text": {
-                "_desc": "RSUnc",
                 "en": "Ballots Uncounted"
             }
         },
@@ -252,7 +293,6 @@
             "heading": "Writein Votes",
             "description": "Undetermined write-in votes",
             "text": {
-                "_desc": "RSWri: Label for the number of write-in votes",
                 "en": "Write-in Votes"
             }
         },
@@ -269,7 +309,6 @@
             "heading": "Undervotes",
             "description": "Number of votes allowed not voted, excluding blank ballots reported",
             "text": {
-                "_desc": "RSUnd",
                 "en": "Undervotes",
                 "es": "Votos insuficientes",
                 "tl": "Mga kulang na boto",
@@ -289,7 +328,6 @@
             "heading": "Overvotes",
             "description": "Number of ballots with more votes selected than allowed",
             "text": {
-                "_desc": "RSOvr",
                 "en": "Overvotes",
                 "es": "Sobrevotos",
                 "tl": "Mga sobrang boto",
@@ -301,7 +339,6 @@
             "heading": "Skipped Votes",
             "description": "Number of votes explicitly marked as skip-this-contest",
             "text": {
-                "_desc": "RSSki",
                 "en": "Skipped Votes"
             }
         },
@@ -310,7 +347,46 @@
             "heading": "Exhausted Ballots",
             "description": "Number of RCV ballots where all choices are eliminated",
             "text": {
-                "_desc": "RSExh: Exhausted votes, for use in RCV contests.",
+                "en": "Exhausted Ballots"
+            }
+        },
+        {
+            "_id": "RSIss",
+            "heading": "Issued Ballots",
+            "description": "Number of ballots issued to voters",
+            "text": {
+                "en": "Issued Ballots"
+            }
+        },
+        {
+            "_id": "RSCnt",
+            "heading": "Counted Ballots",
+            "description": "Number of ballots cast accepted for counting",
+            "text": {
+                "en": "Counted Ballots"
+            }
+        },
+        {
+            "_id": "RSPnd",
+            "heading": "Pending Ballots",
+            "description": "Uncounted ballots pending review",
+            "text": {
+                "en": "Pending Ballots"
+            }
+        },
+        {
+            "_id": "RSPCha",
+            "heading": "Challenged Ballots",
+            "description": "Ballots rejected including those pending correction",
+            "text": {
+                "en": "Challenged Ballots"
+            }
+        },
+        {
+            "_id": "RSExh",
+            "heading": "Exhausted Ballots",
+            "description": "Number of RCV ballots where all choices are eliminated",
+            "text": {
                 "en": "Exhausted Ballots"
             }
         }
@@ -378,7 +454,6 @@
             "_id": "TO",
             "heading": "Total",
             "text": {
-                "_desc": "TO",
                 "en": "Total",
                 "es": "Total",
                 "tl": "Kabuuan",
@@ -389,7 +464,6 @@
             "_id": "ED",
             "heading": "Election Day",
             "text": {
-                "_desc": "ED",
                 "en": "Election Day",
                 "es": "Día de las Elecciones",
                 "tl": "Araw ng Eleksyon",
@@ -400,7 +474,6 @@
             "_id": "MV",
             "heading": "Vote By Mail",
             "text": {
-                "_desc": "MV",
                 "en": "Vote By Mail",
                 "es": "Voto por correo",
                 "tl": "Pagboto sa pamamagitan ng Koreo",
@@ -411,7 +484,6 @@
             "_id": "EV",
             "heading": "Early Voting",
             "text": {
-                "_desc": "EV",
                 "en": "Early Voting"
             }
         },
@@ -419,7 +491,6 @@
             "_id": "IA",
             "heading": "In-County",
             "text": {
-                "_desc": "IA",
                 "en": "In-County"
             }
         },
@@ -427,7 +498,6 @@
             "_id": "XA",
             "heading": "Other Counties",
             "text": {
-                "_desc": "XA",
                 "en": "Other Counties"
             }
         },
@@ -435,7 +505,6 @@
             "_id": "PV",
             "heading": "Provisional Voting",
             "text": {
-                "_desc": "PV",
                 "en": "Provisional Voting"
             }
         }

@@ -18,6 +18,7 @@ from tsvio import TSVReader, TSVWriter
 from zipfile import ZipFile
 from natsort import natsorted
 from gzip import GzipFile
+from collections import defaultdict
 
 DESCRIPTION = """\
 Convert the turnout-raw/vbmprecinct.tsv into:
@@ -41,6 +42,13 @@ Requires the following EMS files:
 """
 
 VERSION='0.0.1'     # Program version
+
+OUT_DIR = "../out-orr/resultdata"
+TURNOUT_FILE = f"{OUT_DIR}/turnout.tsv"
+
+if not os.path.exists(OUT_DIR):
+    os.makedirs(OUT_DIR)
+
 
 def parse_args():
     """
@@ -99,17 +107,18 @@ partyNames = {
     'NPP':'No Party Preference',
     }
 partyName2ID = {v:k for k,v in partyNames.items()}
-partyName2ID['*TOTAL*'] = 'TO'
+partyName2ID['*TOTAL*'] = 'ALL'
+partyName2ID['*TOTALS*'] = 'ALL'
 partyName2ID['Non-Partisan'] = 'NPP'
 
 
-partyCodeHeader = "TO|AI|AINPP|DEM|DEMNPP|GRN|LIB|LIBNPP|PF|REP|NPP"
+partyCodeHeader = "ALL|AI|AINPP|DEM|DEMNPP|GRN|LIB|LIBNPP|PF|REP|NPP"
 partyCodes = partyCodeHeader.split('|')
 partyHeadings = "|American_Independent_|No_Party_Preference_(AI)_|Democratic_|No_Party_Preference_(DEM)_|Green_|Libertarian_|No_Party_Preference_(LIB)_|Peace_&_Freedom_|Republican_|No_Party_Preference_".split('|')
 
-groupCodes = "IS|RT|AC|PN|CH".split('|')
+groupCodes = "RSIss|RSCst|RSCnt|RSPnd|RSCha".split('|')
 groupHeadings = "Issued|Returned|Accepted|Pending|Challenged".split('|')
-groupCodes2 = ['RG']+groupCodes
+groupCodes2 = ['RSRegTO','RSRegED']+groupCodes
 
 VBM_header = "VotingPrecinctID|VotingPrecinctName|MailBallotPrecinct|BalType"\
     "|Assembly|Congressional|Senatorial|Supervisorial|Issued"\
@@ -152,8 +161,20 @@ def sortkey(k):
     order=ordermap.get(k[0:4],' ')
     return order+k[4:] if len(k)>5 else order+'0'+k[4:]
 
+Counting_Group2Id = {
+    '*TOTALS*':'TO',
+    'Election Day':'ED',
+    'Vote by Mail':'MV',
+    }
+Card_Index2Id = {
+    '*TOTALS*':'RSVot',
+    '1':'RSCd1',
+    '2':'RSCd2',
+    }
+
 
 precinctPartyReg = {}
+allpctPartyTurnout = defaultdict(int)
 with ZipFile("resultdata-raw.zip") as rzip:
     with TSVReader("Registration.txt",opener=rzip,binary_decode=True,
                    validate_header=REGISTRATION_header) as f:
@@ -162,28 +183,74 @@ with ZipFile("resultdata-raw.zip") as rzip:
             party_id = partyName2ID[ElectorGroupName]
             precinctPartyReg[f"PCT{PrecinctExternalId}:{party_id}"] = Count
 
+    with TSVReader("BallotGroupTurnout.psv",opener=rzip,binary_decode=True,
+                   validate_header="Ballot Group|Counting Group|Card Index|Turnout"
+                   ) as f:
+        for (Ballot_Group, Counting_Group, Card_Index, Turnout) in f.readlines():
+            # party, voting group, card, voters
+            if Ballot_Group == '\x0c':
+                # Page break
+                continue
+            Ballot_Group = re.sub(r' By Type$','',Ballot_Group)
+            Ballot_Group, n = re.subn(r' NPP$','', Ballot_Group)
+            party_id = partyName2ID[Ballot_Group]
+            if n:
+                party_id += 'NPP'
+            voting_group = Counting_Group2Id[Counting_Group]
+            card_id = Card_Index2Id[Card_Index]
+            allpctPartyTurnout[f'{voting_group}:{card_id}:{party_id}'] +=int(Turnout)
+
+        # Fix missing card totals
+        for rs in ['RSCd1','RSCd2']:
+            for p in partyCodes:
+                allpctPartyTurnout[f'TO:{rs}:{p}']= (
+                    allpctPartyTurnout[f'ED:{rs}:{p}']+
+                    allpctPartyTurnout[f'MV:{rs}:{p}'])
+
+def NPPCrossover(party_id:str)->str:
+    """
+    Convert xxxNPP crossover ID to just NPP for registration
+    """
+    return 'NPP' if party_id.endswith("NPP") else party_id
+
+
+def getPrecinctPartyReg(area_id:str, party_id:str)->int:
+    """
+    Retrieve the registration count for an area and party.
+    For NPP crossover, use the NPP total
+    """
+    # Trim party prefix before NPP, so crossover use the whole NPP
+    return int(precinctPartyReg.get(f"{area_id}:{NPPCrossover(party_id)}",0))
+
 
 with ZipFile("turnoutdata-raw.zip") as rzip:
     with TSVReader("vbmprecinct.csv",opener=rzip,binary_decode=True,
                     validate_header=VBM_header) as f:
         VBM_turnout = f.loaddict()
 
-    with TSVWriter('vbmparty.tsv',sort=True,sep=separator,
-                   header="area_id|subtotal_type|"+partyCodeHeader) as o:
+    with TSVWriter(TURNOUT_FILE,sort=True,sep=separator,
+                   header="area_id|subtotal_type|result_stat|"+partyCodeHeader) as o:
         for r in VBM_turnout.values():
             pct = r['VotingPrecinctID']
             pcta = 'PCT'+pct
             groupcols = []
 
             # Create a pseudo-group for party registration
-            cols = [precinctPartyReg.get(f"{pcta}:{ph}",0) for ph in partyCodes]
-            o.addline(pcta,'RG',*cols)
+            cols = [getPrecinctPartyReg(pcta, ph) for ph in partyCodes]
+            o.addline(pcta,'TO','RSReg',*cols)
             groupcols.append(cols)
 
+            # Create computed election-day registration
+            cols_mv = [int(r[ph+'Issued']) for ph in partyHeadings]
+            cols_ed = [
+                to-mv if to>=mv else 0
+                for to,mv in zip(cols, cols_mv)]
+            o.addline(pcta,'ED','RSReg',*cols_ed)
+            groupcols.append(cols_ed)
 
             for gh,group in zip(groupHeadings,groupCodes):
                 cols = [r[ph+gh] for ph in partyHeadings]
-                o.addline(pcta,group,*cols)
+                o.addline(pcta,'MV',group,*cols)
                 groupcols.append(cols)
 
             addGroupCols('ALLPCTS')
@@ -212,13 +279,25 @@ with ZipFile("turnoutdata-raw.zip") as rzip:
 
         for area,rows in sorted(sdisttotal.items(), key=sortkey):
             for i,group in enumerate(groupCodes2):
-                line = o.joinline(area,group,*(sdisttotal[area][i]))
+                m=re.match(r'(RS.*)(TO|ED)$',group)
+                if m:
+                    group, vg = m.groups()
+                else:
+                    vg = 'MV'
+                line = o.joinline(area,vg,group,*(sdisttotal[area][i]))
                 if area=='CONG13':
                     continue
                 if area=='ALLPCTS':
                     o.lines.insert(i,line)
                 else:
                     o.lines.append(line)
+
+        # Insert turnout for ALLPCTS
+        for i, vg in reversed(list(enumerate(Counting_Group2Id.values()))):
+            for rs in reversed(list(Card_Index2Id.values())):
+                cols = [allpctPartyTurnout[f'{vg}:{rs}:{party_id}']
+                        for party_id in partyCodes]
+                o.lines.insert(i+1,o.joinline('ALLPCTS',vg,rs,*cols))
 
         o.sort = False
 
