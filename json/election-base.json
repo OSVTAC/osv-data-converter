@@ -375,7 +375,7 @@
             }
         },
         {
-            "_id": "RSPCha",
+            "_id": "RSCha",
             "heading": "Challenged Ballots",
             "description": "Ballots rejected including those pending correction",
             "text": {
