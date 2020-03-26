@@ -12,8 +12,8 @@
         },
         {
             "_id": "AINPP",
-            "heading": "American Independent Crossover",
             "contest_party_crossover": true,
+            "heading": "American Independent Crossover",
             "name": {
                 "en": "American Independent Crossover"
             }
@@ -37,8 +37,8 @@
         },
         {
             "_id": "DEMNPP",
-            "heading": "Democratic Crossover",
             "contest_party_crossover": true,
+            "heading": "Democratic Crossover",
             "name": {
                 "en": "Democratic Crossover"
             }
@@ -72,8 +72,8 @@
         },
         {
             "_id": "LIBNPP",
-            "heading": "Libertarian Crossover",
             "contest_party_crossover": true,
+            "heading": "Libertarian Crossover",
             "name": {
                 "en": "Libertarian Crossover"
             }
@@ -144,8 +144,8 @@
     "result_stat_types": [
         {
             "_id": "RSTot",
-            "heading": "Total Votes",
             "description": "Number of valid votes included in totals",
+            "heading": "Total Votes",
             "text": {
                 "en": "Total Votes",
                 "es": "Total",
@@ -155,16 +155,16 @@
         },
         {
             "_id": "RSVot",
-            "heading": "Voters Participating",
             "description": "Number of voters checking in at a poll site or returning a mail ballot",
+            "heading": "Voters Participating",
             "text": {
                 "en": "Voters Participating"
             }
         },
         {
             "_id": "RSCst",
-            "heading": "Ballots Cast",
             "description": "Number of ballots submitted by votes",
+            "heading": "Ballots Cast",
             "text": {
                 "en": "Ballots Cast",
                 "es": "Votos",
@@ -174,16 +174,16 @@
         },
         {
             "_id": "RSCd1",
-            "heading": "Card 1 Ballots Cast",
             "description": "Number of ballot cards 1 submitted by votes",
+            "heading": "Card 1 Ballots Cast",
             "text": {
                 "en": "Card 1 Ballots Cast"
             }
         },
         {
             "_id": "RSCd2",
-            "heading": "Card 2 Ballots Cast",
             "description": "Number of ballot cards 2 submitted by votes",
+            "heading": "Card 2 Ballots Cast",
             "text": {
                 "en": "Card 2 Ballots Cast"
             }
@@ -198,56 +198,56 @@
         },
         {
             "_id": "RSCd4",
-            "heading": "Card 4 Ballots Cast",
             "description": "Number of ballot cards 4 submitted by votes",
+            "heading": "Card 4 Ballots Cast",
             "text": {
                 "en": "Card 4 Ballots Cast"
             }
         },
         {
             "_id": "RSCd5",
-            "heading": "Card 5 Ballots Cast",
             "description": "Number of ballot cards 5 submitted by votes",
+            "heading": "Card 5 Ballots Cast",
             "text": {
                 "en": "Card 5 Ballots Cast"
             }
         },
         {
             "_id": "RSCd6",
-            "heading": "Card 6 Ballots Cast",
             "description": "Number of ballot cards 6 submitted by votes",
+            "heading": "Card 6 Ballots Cast",
             "text": {
                 "en": "Card 6 Ballots Cast"
             }
         },
         {
             "_id": "RSCd7",
-            "heading": "Card 7 Ballots Cast",
             "description": "Number of ballot cards 7 submitted by votes",
+            "heading": "Card 7 Ballots Cast",
             "text": {
                 "en": "Card 7 Ballots Cast"
             }
         },
         {
             "_id": "RSCd8",
-            "heading": "Card 8 Ballots Cast",
             "description": "Number of ballot cards 8 submitted by votes",
+            "heading": "Card 8 Ballots Cast",
             "text": {
                 "en": "Card 8 Ballots Cast"
             }
         },
         {
             "_id": "RSCd9",
-            "heading": "Card 9 Ballots Cast",
             "description": "Number of ballot cards 9 submitted by votes",
+            "heading": "Card 9 Ballots Cast",
             "text": {
                 "en": "Card 9 Ballots Cast"
             }
         },
         {
             "_id": "RSReg",
-            "heading": "Registered Voters",
             "description": "Number of registerd voters in the election",
+            "heading": "Registered Voters",
             "text": {
                 "en": "Registered Voters",
                 "es": "Electores inscritos",
@@ -257,16 +257,16 @@
         },
         {
             "_id": "RSEli",
-            "heading": "Eligible Voters",
             "description": "Estimated number of people who may register to vote",
+            "heading": "Eligible Voters",
             "text": {
                 "en": "Eligible Voters"
             }
         },
         {
             "_id": "RSTrn",
-            "heading": "Voter Turnout",
             "description": "Percentage of voters participating / registered",
+            "heading": "Voter Turnout",
             "is_percent": true,
             "text": {
                 "en": "Voter Turnout"
@@ -274,40 +274,40 @@
         },
         {
             "_id": "RSRej",
-            "heading": "Ballots Rejected",
             "description": "Ballots cast that are challenged or rejected",
+            "heading": "Ballots Rejected",
             "text": {
                 "en": "Ballots Rejected"
             }
         },
         {
             "_id": "RSUnc",
-            "heading": "Ballots Uncounted",
             "description": "Ballots received but not included in totals",
+            "heading": "Ballots Uncounted",
             "text": {
                 "en": "Ballots Uncounted"
             }
         },
         {
             "_id": "RSWri",
-            "heading": "Writein Votes",
             "description": "Undetermined write-in votes",
+            "heading": "Writein Votes",
             "text": {
                 "en": "Write-in Votes"
             }
         },
         {
             "_id": "RSIWr",
-            "heading": "Invalid Writein Votes",
             "description": "Write-in vote with a blank or ineligible candidate name",
+            "heading": "Invalid Writein Votes",
             "text": {
                 "en": "Invalid Write-in Votes"
             }
         },
         {
             "_id": "RSUnd",
-            "heading": "Undervotes",
             "description": "Number of votes allowed not voted, excluding blank ballots reported",
+            "heading": "Undervotes",
             "text": {
                 "en": "Undervotes",
                 "es": "Votos insuficientes",
@@ -317,16 +317,16 @@
         },
         {
             "_id": "RSBla",
-            "heading": "Blank Ballots",
             "description": "Number of ballots with no votes selected",
+            "heading": "Blank Ballots",
             "text": {
                 "en": "Blank Ballots"
             }
         },
         {
             "_id": "RSOvr",
-            "heading": "Overvotes",
             "description": "Number of ballots with more votes selected than allowed",
+            "heading": "Overvotes",
             "text": {
                 "en": "Overvotes",
                 "es": "Sobrevotos",
@@ -336,56 +336,56 @@
         },
         {
             "_id": "RSSki",
-            "heading": "Skipped Votes",
             "description": "Number of votes explicitly marked as skip-this-contest",
+            "heading": "Skipped Votes",
             "text": {
                 "en": "Skipped Votes"
             }
         },
         {
             "_id": "RSExh",
-            "heading": "Exhausted Ballots",
             "description": "Number of RCV ballots where all choices are eliminated",
+            "heading": "Exhausted Ballots",
             "text": {
                 "en": "Exhausted Ballots"
             }
         },
         {
             "_id": "RSIss",
-            "heading": "Issued Ballots",
             "description": "Number of ballots issued to voters",
+            "heading": "Issued Ballots",
             "text": {
                 "en": "Issued Ballots"
             }
         },
         {
             "_id": "RSCnt",
-            "heading": "Counted Ballots",
             "description": "Number of ballots cast accepted for counting",
+            "heading": "Counted Ballots",
             "text": {
                 "en": "Counted Ballots"
             }
         },
         {
             "_id": "RSPnd",
-            "heading": "Pending Ballots",
             "description": "Uncounted ballots pending review",
+            "heading": "Pending Ballots",
             "text": {
                 "en": "Pending Ballots"
             }
         },
         {
             "_id": "RSCha",
-            "heading": "Challenged Ballots",
             "description": "Ballots rejected including those pending correction",
+            "heading": "Challenged Ballots",
             "text": {
                 "en": "Challenged Ballots"
             }
         },
         {
             "_id": "RSExh",
-            "heading": "Exhausted Ballots",
             "description": "Number of RCV ballots where all choices are eliminated",
+            "heading": "Exhausted Ballots",
             "text": {
                 "en": "Exhausted Ballots"
             }
@@ -449,7 +449,7 @@
             "voting_group_ids": "TO ED MV"
         }
     ],
-"voting_groups": [
+    "voting_groups": [
         {
             "_id": "TO",
             "heading": "Total",
