@@ -30,6 +30,8 @@ import utils
 LANG_CODE_EN = 'en'
 
 ELECTION_BASE_PATH = Path('json/election-base.json')
+# Keep this commented line for now.
+# ELECTION_BASE_PATH = Path('../osv-results-demo/submodules/osv-results-reporter/sampledata/minimal-test/election.json')
 
 TRANSLATIONS_JSON_PATH = Path('submodules/osv-translations/translations.json')
 
@@ -44,7 +46,7 @@ RESULT_STAT_TO_PHRASE_ID = {
     'RSRej': 'category_ballots_rejected',
     'RSSki': 'category_votes_skipped',
     'RSTot': 'category_votes_choices_total',
-    'RSTrn': 'category_voter_turnout',
+    'RSTrn': 'category_turnout_voter',
     'RSUnc': 'category_ballots_uncounted',
     'RSUnd': 'category_votes_undervotes',
     'RSVot': 'category_voters_participating',
