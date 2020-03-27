@@ -1,53 +1,91 @@
 {
-"result_stat_types": [
+    "result_stat_types": [
         {
             "_id": "RSTot",
-            "heading": "Ballots Counted"
+            "name": {
+                "en": "Ballots Counted"
+            }
         },
         {
             "_id": "RSCst",
-            "heading": "Ballots Cast"
+            "name": {
+                "en": "Ballots Cast",
+                "es": "Votos",
+                "tl": "Mga Inihulog na Balota",
+                "zh": "投票總數"
+            }
         },
         {
             "_id": "RSReg",
-            "heading": "Registered Voters"
+            "name": {
+                "en": "Registered Voters",
+                "es": "Electores inscritos",
+                "tl": "Rehistradong Botante",
+                "zh": "登記選民人數"
+            }
         },
         {
             "_id": "RSEli",
-            "heading": "Eligible Voters"
+            "name": {
+                "en": "Eligible Voters",
+                "zh": "有資格投票的選民人數"
+            }
         },
         {
             "_id": "RSTrn",
-            "heading": "Voter Turnout",
-            "is_percent": true
+            "is_percent": true,
+            "name": {
+                "en": "Voter Turnout"
+            }
         },
         {
             "_id": "RSRej",
-            "heading": "Ballots Rejected"
+            "name": {
+                "en": "Ballots Rejected"
+            }
         },
         {
             "_id": "RSUnc",
-            "heading": "Ballots Uncounted"
+            "name": {
+                "en": "Ballots Uncounted"
+            }
         },
         {
             "_id": "RSWri",
-            "heading": "Writein Votes"
+            "name": {
+                "en": "Write-in Votes",
+                "zh": "信件郵票數"
+            }
         },
         {
             "_id": "RSUnd",
-            "heading": "Undervotes"
+            "name": {
+                "en": "Undervotes",
+                "es": "Votos insuficientes",
+                "tl": "Mga kulang na boto",
+                "zh": "投票不足"
+            }
         },
         {
             "_id": "RSOvr",
-            "heading": "Overvotes"
+            "name": {
+                "en": "Overvotes",
+                "es": "Sobrevotos",
+                "tl": "Mga sobrang boto",
+                "zh": "過度投票"
+            }
         },
         {
             "_id": "RSSki",
-            "heading": "Skipped Votes"
+            "name": {
+                "en": "Skipped Votes"
+            }
         },
         {
             "_id": "RSExh",
-            "heading": "Exhausted Ballots"
+            "name": {
+                "en": "Exhausted Ballots"
+            }
         }
     ],
     "result_styles": [
@@ -94,84 +132,57 @@
             "voting_group_ids": "TO"
         }
     ],
-    "translations": {
-        "ballots_cast": {
-            "en": "Ballots Cast"
-        },
-        "ballots_counted": {
-            "en": "Ballots Counted"
-        },
-        "ballots_rejected": {
-            "en": "Ballots Rejected"
-        },
-        "ballots_uncounted": {
-            "en": "Ballots Uncounted"
-        },
-        "exhausted_ballots": {
-            "en": "Exhausted Ballots"
-        },
-        "overvotes": {
-            "en": "Overvotes"
-        },
-        "registered_voters": {
-            "en": "Registered Voters"
-        },
-        "undervotes": {
-            "en": "Undervotes"
-        },
-        "voter_turnout": {
-            "en": "Voter Turnout"
-        },
-        "writein": {
-            "en": "Write-In",
-            "es": "NO LISTADO",
-            "tl": "ISINUSULAT-LAMANG",
-            "zh": "補寫候選人"
-        },
-        "writein_votes": {
-            "en": "Writein Votes"
-        },
-        "yes": {
-            "en": "YES",
-            "es": "SÍ",
-            "tl": "OO",
-            "zh": "贊成"
-        },
-        "no": {
-            "en": "NO",
-            "es": "NO",
-            "tl": "HINDI",
-            "zh": "反對"
-        }
-    },
     "voting_groups": [
         {
             "_id": "TO",
-            "heading": "Total"
+            "name": {
+                "en": "Total",
+                "es": "Total",
+                "tl": "Kabuuan",
+                "zh": "總共"
+            }
         },
         {
             "_id": "ED",
-            "heading": "Election Day"
+            "name": {
+                "en": "Election Day",
+                "es": "Día de las Elecciones",
+                "tl": "Araw ng Eleksyon",
+                "zh": "投票日"
+            }
         },
         {
             "_id": "MV",
-            "heading": "Vote By Mail"
+            "name": {
+                "en": "Vote By Mail",
+                "es": "Voto por correo",
+                "tl": "Pagboto sa pamamagitan ng Koreo",
+                "zh": "郵寄投票"
+            }
         },
         {
             "_id": "EV",
-            "heading": "Early Voting"
+            "name": {
+                "en": "Early Voting"
+            }
         },
         {
             "_id": "IA",
-            "heading": "In-County"
+            "name": {
+                "en": "In-County"
+            }
         },
         {
             "_id": "XA",
-            "heading": "Other Counties"
+            "name": {
+                "en": "Other Counties"
+            }
         },
         {
             "_id": "PV",
-            "heading": "Provisional Voting"
+            "name": {
+                "en": "Provisional Voting"
+            }
         }
     ]
 }

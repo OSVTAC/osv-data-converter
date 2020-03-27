@@ -19,6 +19,7 @@ from zipfile import ZipFile
 from natsort import natsorted
 from gzip import GzipFile
 from collections import defaultdict
+from typing import List, Pattern, Match, Dict, Set, TextIO
 
 DESCRIPTION = """\
 Convert the turnout-raw/vbmprecinct.tsv into:
@@ -114,6 +115,13 @@ partyName2ID['Non-Partisan'] = 'NPP'
 
 partyCodeHeader = "ALL|AI|AINPP|DEM|DEMNPP|GRN|LIB|LIBNPP|PF|REP|NPP"
 partyCodes = partyCodeHeader.split('|')
+# Add NPPALL as computed total of AINPP+DEMNPP+LIBNPP+NPP
+partyCodes2 = partyCodes+['NPPALL']
+nppall_i = len(partyCodes)
+npp_cols = [i for i,n in enumerate(partyCodes) if n.endswith('NPP')]
+
+print(f"npp_cols={npp_cols}")
+
 partyHeadings = "|American_Independent_|No_Party_Preference_(AI)_|Democratic_|No_Party_Preference_(DEM)_|Green_|Libertarian_|No_Party_Preference_(LIB)_|Peace_&_Freedom_|Republican_|No_Party_Preference_".split('|')
 
 groupCodes = "RSIss|RSCst|RSCnt|RSPnd|RSCha".split('|')
@@ -150,7 +158,7 @@ REGISTRATION_header = "PrecinctName|PrecinctExternalId|ElectorGroupName"\
 
 def addGroupCols(area:str):
     if area not in sdisttotal:
-        sdisttotal[area]=[[0]*len(partyCodes) for i in range(len(groupCodes2))]
+        sdisttotal[area]=[[0]*len(partyCodes2) for i in range(len(groupCodes2))]
     for i,grouptotals in enumerate(sdisttotal[area]):
         for j,v in enumerate(groupcols[i]):
             grouptotals[j] += int(v)
@@ -209,9 +217,10 @@ with ZipFile("resultdata-raw.zip") as rzip:
 
 def NPPCrossover(party_id:str)->str:
     """
-    Convert xxxNPP crossover ID to just NPP for registration
+    Convert xxxNPP and NPPALL crossover ID to just NPP for registration
     """
-    return 'NPP' if party_id.endswith("NPP") else party_id
+    return 'NPP' if (party_id.endswith("NPP")
+                    or party_id.startswith("NPP")) else party_id
 
 
 def getPrecinctPartyReg(area_id:str, party_id:str)->int:
@@ -222,6 +231,12 @@ def getPrecinctPartyReg(area_id:str, party_id:str)->int:
     # Trim party prefix before NPP, so crossover use the whole NPP
     return int(precinctPartyReg.get(f"{area_id}:{NPPCrossover(party_id)}",0))
 
+def appendNPPALL(cols:List[int]):
+    """
+    Compute the sum of xxxNPP columns and append as NPPALL
+    """
+    cols.append(sum([int(cols[i]) for i in npp_cols]))
+
 
 with ZipFile("turnoutdata-raw.zip") as rzip:
     with TSVReader("vbmprecinct.csv",opener=rzip,binary_decode=True,
@@ -229,19 +244,20 @@ with ZipFile("turnoutdata-raw.zip") as rzip:
         VBM_turnout = f.loaddict()
 
     with TSVWriter(TURNOUT_FILE,sort=True,sep=separator,
-                   header="area_id|subtotal_type|result_stat|"+partyCodeHeader) as o:
+                   header=f"area_id|subtotal_type|result_stat|{partyCodeHeader}|NPPALL") as o:
         for r in VBM_turnout.values():
             pct = r['VotingPrecinctID']
             pcta = 'PCT'+pct
             groupcols = []
 
             # Create a pseudo-group for party registration
-            cols = [getPrecinctPartyReg(pcta, ph) for ph in partyCodes]
+            cols = [getPrecinctPartyReg(pcta, ph) for ph in partyCodes2]
             o.addline(pcta,'TO','RSReg',*cols)
             groupcols.append(cols)
 
             # Create computed election-day registration
             cols_mv = [int(r[ph+'Issued']) for ph in partyHeadings]
+            appendNPPALL(cols_mv)
             cols_ed = [
                 to-mv if to>=mv else 0
                 for to,mv in zip(cols, cols_mv)]
@@ -250,6 +266,7 @@ with ZipFile("turnoutdata-raw.zip") as rzip:
 
             for gh,group in zip(groupHeadings,groupCodes):
                 cols = [r[ph+gh] for ph in partyHeadings]
+                appendNPPALL(cols)
                 o.addline(pcta,'MV',group,*cols)
                 groupcols.append(cols)
 
@@ -297,6 +314,11 @@ with ZipFile("turnoutdata-raw.zip") as rzip:
             for rs in reversed(list(Card_Index2Id.values())):
                 cols = [allpctPartyTurnout[f'{vg}:{rs}:{party_id}']
                         for party_id in partyCodes]
+                #if rs.startswith('RSCd'):
+                    #cols.append('')
+                #else:
+                    #appendNPPALL(cols)
+                appendNPPALL(cols)
                 o.lines.insert(i+1,o.joinline('ALLPCTS',vg,rs,*cols))
 
         o.sort = False

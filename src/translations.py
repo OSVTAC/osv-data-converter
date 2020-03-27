@@ -29,7 +29,7 @@ from typing import List, Pattern, Match, Dict, NewType, Tuple, Any, NamedTuple, 
 
 # HACK:Map _param names to regex here hard-coded
 PARAM_NAME_REGEX = [
-    (re.compile(r'(_count|_number)$'),r'\d+')
+    (re.compile(r'(_?count|_?number|^part|^total)$'),r'\d+')
     ]
 
 def form_translate_key(s:str)->str:
@@ -88,6 +88,9 @@ class Translator:
             enk = form_translate_key(en)
 
             params = istr.pop('_params',None)
+
+            # Sanitize istr
+            istr = {k:v for k,v in istr.items() if v}
             if not params:
                 # Plain translation of full English phrase
                 # Add to translations_by_en[] translation_key_by_en[]
@@ -110,7 +113,8 @@ class Translator:
             else:
                 # Create parametric translation
                 # First form a list of regex to match for params
-                parampat = [] # List of regex match for each param
+                parampat = {} # List of regex match for each param
+                parampat_i = []
                 for p in params:
                     # find regex
                     rfound = r'.*?' # Map unmatched to anything
@@ -120,27 +124,52 @@ class Translator:
                             continue
                         rfound = regex
                         break
-                    parampat.append(rfound)
+                    parampat_i.append(rfound)
+                    parampat[p] = rfound
                 # Map the english
                 # First convert special characters as-is
                 patstr = re.sub(r'([^\w\{\}\- ])',r'\\\1',en)
                 # TODO: We could also make matches independent of spaces, etc.
                 #print(f"Regex for {key}={en} parampats={parampat}")
                 try:
-                    # Check the English for {0}...{len(params)-1}
-                    i = 0
-                    subs = re.findall(r'\{(\d+)\}',en)
-                    for v in subs:
-                        if int(v)!=i:
+                    if re.search(r'\{(\d+)\}',en):
+                        # Crash for now, but we could allow either later
+                        raise Exception("Numbered translation parameters not supported")
+                        # Check the English for {0}...{len(params)-1}
+                        i = 0
+                        subs = re.findall(r'\{(\d+)\}',en)
+                        for v in subs:
+                            if int(v)!=i:
+                                raise Exception("Invalid sequence for {key}:{en}")
+                            i = i+1
+                        if i!=len(parampat):
                             raise Exception("Invalid sequence for {key}:{en}")
-                        i = i+1
-                    if i!=len(parampat):
-                        raise Exception("Invalid sequence for {key}:{en}")
 
-                    # Convert {\d+} to parameter regex
-                    patstr = re.sub(r'\{(\d+)\}',
-                                lambda m:(r'('+parampat[int(m.group(1))]+')'),en)
+                        # Convert {\d+} to parameter regex (.*?) etc
+                        patstr = re.sub(r'\{(\d+)\}',
+                                    lambda m:(r'('+parampat_i[int(m.group(1))]+')'),en)
+                    else:
+                        # Check the English for {name}
+                        foundpat=set()
+                        i = 0
+                        subs = re.findall(r'\{([_a-zA-Z]\w*)\}',en)
+                        for v in subs:
+                            if v not in parampat:
+                                print(f"Parameter {v} not defined in {params}")
+                                raise Exception("Invalid parameter {v} in {en}")
+                            foundpat.add(v)
+                            i = i+1
+                        if len(foundpat) != len(params) or i != len(params):
+                            raise Exception("Invalid sequence for {key}:{en}")
+
+                        # Convert {name} to (?P<name>regex)
+                        patstr = re.sub(r'\{([_a-zA-Z]\w*)\}',
+                                        lambda m: (r'(?P<'+m.group(1)+'>'+
+                                            parampat[m.group(1)]+')'),en)
+                        #print(f"regex {en}->{patstr}")
+
                     pat = re.compile(f'^{patstr}$', flags=re.I)
+
                 except Exception as e:
                     # TODO: Handle this better
                     print(f"Invalid translation {key} en:{en} regex='{patstr}': {e}")
@@ -191,9 +220,18 @@ class Translator:
             m = pat.match(en)
             if m:
                 try:
-                    newistr = { k:re.sub(r'\{(\d+)\}',
-                                 lambda m2: m.group(int(m2.group(1))+1), v)
-                        for k, v in istr.items()}
+                    if 0:
+                        # Numbered substitutions
+                        newistr = { k:re.sub(r'\{(\d+)\}',
+                                    lambda m2: m.group(int(m2.group(1))+1), v)
+                            for k, v in istr.items()}
+                    else:
+                        # Translations are a format string
+                        newistr = { k:v.format_map(m.groupdict(""))
+                            for k, v in istr.items() if v}
+
+                        #print(f"Translate {key}: {newistr}")
+
                     # Save in case of a repeat
                     self.translations_by_en[enk] = newistr
                     #print(f"Translation for {en} = {newistr}")
