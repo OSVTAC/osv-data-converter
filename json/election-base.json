@@ -139,7 +139,10 @@
             "_id": "RSVot",
             "description": "Number of voters checking in at a poll site or returning a mail ballot",
             "text": {
-                "en": "Voters Participating"
+                "en": "Voters Participating",
+                "es": "",
+                "tl": "",
+                "zh": ""
             }
         },
         {
@@ -230,6 +233,8 @@
             "description": "Estimated number of people who may register to vote",
             "text": {
                 "en": "Eligible Voters",
+                "es": "",
+                "tl": "",
                 "zh": "有資格投票的選民人數"
             }
         },
@@ -245,14 +250,20 @@
             "_id": "RSRej",
             "description": "Ballots cast that are challenged or rejected",
             "text": {
-                "en": "Ballots Rejected"
+                "en": "Ballots Rejected",
+                "es": "",
+                "tl": "",
+                "zh": ""
             }
         },
         {
             "_id": "RSUnc",
             "description": "Ballots received but not included in totals",
             "text": {
-                "en": "Ballots Uncounted"
+                "en": "Ballots Uncounted",
+                "es": "",
+                "tl": "",
+                "zh": ""
             }
         },
         {
@@ -260,6 +271,8 @@
             "description": "Undetermined write-in votes",
             "text": {
                 "en": "Write-in Votes",
+                "es": "",
+                "tl": "",
                 "zh": "信件郵票數"
             }
         },
@@ -284,7 +297,10 @@
             "_id": "RSBla",
             "description": "Number of ballots with no votes selected",
             "text": {
-                "en": "Blank Ballots"
+                "en": "Blank Ballots",
+                "es": "",
+                "tl": "",
+                "zh": ""
             }
         },
         {
@@ -301,14 +317,20 @@
             "_id": "RSSki",
             "description": "Number of votes explicitly marked as skip-this-contest",
             "text": {
-                "en": "Skipped Votes"
+                "en": "Skipped Votes",
+                "es": "",
+                "tl": "",
+                "zh": ""
             }
         },
         {
             "_id": "RSExh",
             "description": "Number of RCV ballots where all choices are eliminated",
             "text": {
-                "en": "Exhausted Ballots"
+                "en": "Exhausted Ballots",
+                "es": "",
+                "tl": "",
+                "zh": ""
             }
         },
         {
@@ -429,25 +451,37 @@
         {
             "_id": "EV",
             "text": {
-                "en": "Early Voting"
+                "en": "Early Voting",
+                "es": "",
+                "tl": "",
+                "zh": ""
             }
         },
         {
             "_id": "IA",
             "text": {
-                "en": "In-County"
+                "en": "In-County",
+                "es": "",
+                "tl": "",
+                "zh": ""
             }
         },
         {
             "_id": "XA",
             "text": {
-                "en": "Other Counties"
+                "en": "Other Counties",
+                "es": "",
+                "tl": "",
+                "zh": ""
             }
         },
         {
             "_id": "PV",
             "text": {
-                "en": "Provisional Voting"
+                "en": "Provisional Voting",
+                "es": "",
+                "tl": "",
+                "zh": ""
             }
         }
     ]

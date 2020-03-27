@@ -998,7 +998,9 @@ with open(path) as f:
 # Get a party map
 partyName2ID = defaultdict(lambda: '')
 for p in basejson['party_names']:
-    partyName2ID[p['heading']]=p['_id']
+    partyName2ID[p['name']['en']]=p['_id']
+
+print(f"partyName2ID={partyName2ID}")
 
 
 

@@ -46,6 +46,8 @@ VERSION='0.0.1'     # Program version
 NOPP_JSON_DUMP_ARGS = dict(sort_keys=False, separators=(',\n',':'), ensure_ascii=False)
 DEFAULT_JSON_DUMP_ARGS = dict(sort_keys=False, indent=4, ensure_ascii=False)
 
+SKIP_BLANK_TRANS = False
+
 
 TRANSLATIONS_FILE = (os.path.dirname(__file__)+
                      "/../submodules/osv-translations/translations.json")

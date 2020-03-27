@@ -78,6 +78,8 @@ class Translator:
 
         self.translations_unmatched = set() # Unmatched translations found
 
+        self.filter_null_strings = False
+
         # Build the English->istr lookup tables and translate patterns
         for key, istr in self.translations.items():
             # Remove _desc so we can use the istr dict directly
@@ -89,8 +91,10 @@ class Translator:
 
             params = istr.pop('_params',None)
 
-            # Sanitize istr
-            istr = {k:v for k,v in istr.items() if v}
+            if self.filter_null_strings:
+                # Sanitize istr
+                istr = {k:v for k,v in istr.items() if v}
+
             if not params:
                 # Plain translation of full English phrase
                 # Add to translations_by_en[] translation_key_by_en[]
