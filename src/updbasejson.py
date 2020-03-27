@@ -44,7 +44,7 @@ VERSION='0.0.1'     # Program version
 
 
 NOPP_JSON_DUMP_ARGS = dict(sort_keys=False, separators=(',\n',':'), ensure_ascii=False)
-DEFAULT_JSON_DUMP_ARGS = dict(sort_keys=False, indent=4, ensure_ascii=False)
+DEFAULT_JSON_DUMP_ARGS = dict(sort_keys=True, indent=4, ensure_ascii=False)
 
 SKIP_BLANK_TRANS = False
 
@@ -86,14 +86,19 @@ args = parse_args()
 
 json_dump_args = NOPP_JSON_DUMP_ARGS if args.ugly else DEFAULT_JSON_DUMP_ARGS
 
-def convjson(j):
+def map_label(context, en):
+    label = f"{context}_{en}".lower()
+    label = re.sub(r'\W+','_',label)
+    return label
+
+def convjson(j, context=""):
     """
     Recursively process json dicts to locate attributes with a translation
     and lookup new/replacement translations. A dict attribute with an 'en'
     key is assumed to be a translation.
     """
     if isinstance(j, list):
-        for li in j: convjson(li)
+        for li in j: convjson(li, context)
         # Doesn't work: map(convjson, j)
         return
     elif not isinstance(j, dict):
@@ -105,13 +110,30 @@ def convjson(j):
     for k, v in j.items():
         if not (isinstance(v, dict) and 'en' in v):
             # Not itext, process recursively
-            convjson(v)
+            convjson(v, k)
             continue;
 
         en = v['en']
         foundTrans = en
         t = translator.lookup_phrase(en)
         if not t:
+            if en not in not_found:
+                if context == 'party_names':
+                    label = f"party_{j['_id']}"
+                elif context == "result_stat_types":
+                    label = map_label("category",en)
+                elif context=="voting_groups":
+                    label = map_label("category",en)
+
+                new_trans[label] = js = {
+                    "en": en,
+                    "es": "",
+                    "tl": "",
+                    "zh": ""
+                }
+                if "description" in j:
+                    js['_desc'] = j["description"]
+
             not_found.add(en)
             continue
 
@@ -149,6 +171,7 @@ translator = Translator(TRANSLATIONS_FILE)
 # Keep a list of the attributes translated
 attrnames_found = set()
 not_found = set()
+new_trans = {}
 
 for f in args.infile:
     if f.endswith('.bak'):
@@ -180,4 +203,9 @@ for f in args.infile:
 if attrnames_found:
     print(f"Attributes Found: {attrnames_found}")
 if attrnames_found:
-    print(f"Translations not Found: {not_found}")
+    print(f"{len(not_found)} Translations not Found")
+
+if new_trans:
+    with open("translations-new.json",'w', encoding='utf-8') as out:
+        json.dump({"translations":new_trans}, out, **json_dump_args)
+        out.write("\n")
