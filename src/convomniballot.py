@@ -704,7 +704,8 @@ def conv_bt_json(j:Dict, bt:str):
                     "classification": classification,
                     "header_id": header_id }
                 if title and (len(text)<len(title) or text.find(title)!=0):
-                    hj["ballot_title"] = translator.check(titles[0])
+                    hj["ballot_title"] = translator.check(titles[0],
+                                                        context="heading")
                 if paragraphs:
                     hj["heading_text"] = paragraphs[0]
 
@@ -753,7 +754,7 @@ def conv_bt_json(j:Dict, bt:str):
                     "_id_ext": external_id,
                     "_type": _type,
                     "header_id": lastheader,
-                    "ballot_title": translator.check(titles[0]),
+                    "ballot_title": translator.check(titles[0], context='contest'),
                     "name": name}
 
                 contest_name = name['en']
@@ -833,8 +834,8 @@ def conv_bt_json(j:Dict, bt:str):
 
         url_state_results = eval_config_pattern_remap(title_party,
                                 config.url_state_results_map)
-        if not found:
-            print(f"url={url_state_results} for '{title_party}'")
+        #if not found:
+            #print(f"url={url_state_results} for '{title_party}'")
         if url_state_results and not found:
             #print(f"url_state_results {title_party}={url_state_results}")
             contj['url_state_results'] = url_state_results
@@ -922,7 +923,7 @@ def conv_bt_json(j:Dict, bt:str):
                                       key=lambda c:c['sequence'])
             # Insert manually added candidates
             if not found and mapped_id in added_contcand:
-                print(f"external_id={mapped_id} in added_contcand")
+                #print(f"external_id={mapped_id} in added_contcand")
                 for candj in added_contcand[mapped_id]:
                     contj['choices'].append(candj)
                     candj['sequence']=len(contj['choices'])
@@ -1000,7 +1001,7 @@ partyName2ID = defaultdict(lambda: '')
 for p in basejson['party_names']:
     partyName2ID[p['name']['en']]=p['_id']
 
-print(f"partyName2ID={partyName2ID}")
+#print(f"partyName2ID={partyName2ID}")
 
 
 
@@ -1338,7 +1339,7 @@ outj = {
     "election": {
         "election_date": election_date,
         "election_area": election_area,
-        "ballot_title": translator.check(ballot_title),
+        "ballot_title": translator.check(ballot_title,context="election"),
         "headers": [ headerjson[i] for i in sorted(headerjson) ],
         "contests": [ contestjson[i] for i in sorted(contestjson) ],
         "turnout": {
@@ -1369,3 +1370,4 @@ with open(f"{OUT_DIR}/election.json",'w') as outfile:
     outfile.write("\n")
 
 translator.print_unmatched("unmatched-translations.txt")
+translator.put_new("translations-new.json")

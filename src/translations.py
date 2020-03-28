@@ -24,6 +24,7 @@ Routines to lookup translations in converted data
 
 import re
 import utils
+import json
 
 from typing import List, Pattern, Match, Dict, NewType, Tuple, Any, NamedTuple, Set
 
@@ -31,6 +32,8 @@ from typing import List, Pattern, Match, Dict, NewType, Tuple, Any, NamedTuple, 
 PARAM_NAME_REGEX = [
     (re.compile(r'(_?count|_?number|^part|^total)$'),r'\d+')
     ]
+
+ADDED_LANG_IDS = "es tl zh"
 
 def form_translate_key(s:str)->str:
     """
@@ -47,11 +50,51 @@ def form_translate_key(s:str)->str:
     s = re.sub(r'\s*[\-\/,]+\s*',' ',s)
     return s
 
+# Prefix to use for selected context names
+MAP_TRANSLATION_CONTEXT = {
+    'party_names':'party',
+    'result_stat_types': 'category',
+    'voting_groups': 'category',
+    }
+
+# context names that use an ID instead of text
+ID_TRANSLATION_CONTEXT = {'party_names'}
+
+def reform_label(context:str, en:str, _id:str)->str:
+    """
+    Invents a label to use as a translation target for new phrase added.
+    """
+    context = context.lower()
+    en = en.lower()
+
+    if _id and (context in ID_TRANSLATION_CONTEXT):
+        # Use ID as-is without lower()
+        en = _id
+
+    # Use blank for _ during formation
+    en = re.sub(r'[_\W]+',' ',en)
+    # Skip numbers
+    en = re.sub(r' *\d+ *',' n ',en).strip()
+
+    if context in MAP_TRANSLATION_CONTEXT:
+        context = MAP_TRANSLATION_CONTEXT[context]
+    else:
+        # Check for phrase based mappings
+        m = re.match(r'^(.*) (district)$', en)
+        if m:
+            en, context = m.groups()
+
+    # Trim prefix words from body: TODO
+    label = context+'_'+en
+    label = label.replace(' ','_')
+    return label
 
 class Translator:
 
     def __init__(self,
-                 filename:str   # translations.json
+                 filename:str,                      # translations.json
+                 added_languages:str=ADDED_LANG_IDS,# space separated IDs
+                 keep_null_translations=False       # True to include "" translations
                  ):
         """
         Initialize a translator and load the translations.json definitions.
@@ -78,7 +121,13 @@ class Translator:
 
         self.translations_unmatched = set() # Unmatched translations found
 
-        self.filter_null_strings = False
+        self.keep_null_translations = keep_null_translations
+
+        self.new_translations = {}
+
+        # The list of additional languages and a template to copy null strings
+        self.added_languages = added_languages.split()
+        self.empty_translations = {k:"" for k in self.added_languages}
 
         # Build the English->istr lookup tables and translate patterns
         for key, istr in self.translations.items():
@@ -91,7 +140,7 @@ class Translator:
 
             params = istr.pop('_params',None)
 
-            if self.filter_null_strings:
+            if not self.keep_null_translations:
                 # Sanitize istr
                 istr = {k:v for k,v in istr.items() if v}
 
@@ -184,8 +233,11 @@ class Translator:
 
 
     def lookup_phrase(self,
-                      en:str,       # English phrase to translate
-                      key_match:str=''  # If defined, regex to match istr key TODO
+                      en:str,           # English phrase to translate
+                      key_match:str='', # If defined, regex to match istr key
+                      context:str=None, # Context for adding missing translations
+                      _id:str=None,     # ID str used for new translations
+                      desc:str=None     # Optional description
                       )->Dict:
         """
         Search for a translations entry to map an English phrase.
@@ -248,6 +300,7 @@ class Translator:
 
         # Not found
         self.translations_unmatched.add(en)
+        self.form_new_translation(en, context=context, desc=desc, _id=_id)
 
 
     def __getitem__(self, key):
@@ -261,20 +314,29 @@ class Translator:
         return v
 
     def get(self,
-            en:str,       # English phrase to translate
-            key_match:str=''  # If defined, regex to match istr key TODO
+            en:str,           # English phrase to translate
+            key_match:str='', # If defined, regex to match istr key
+            context:str=None, # Context for adding missing translations
+            _id:str=None,     # ID str used for new translations
+            desc:str=None     # Optional description
             )->Dict:
         """
         Locate a translation or form an istr with english only.
         Converts a string to a istr Dict in all cases. If not
         found, the 'en' only is returned and the unmatched string recorded.
         """
-        istr = self.lookup_phrase(en, key_match)
+        istr = self.lookup_phrase(en, key_match, context, _id, desc)
         if not istr:
             istr = {'en':en}
         return istr
 
-    def check(self, istr:Dict)->Dict:
+    def check(self,
+              istr:Dict,
+              key_match:str='', # If defined, regex to match istr key
+              context:str=None, # Context for adding missing translations
+              _id:str=None,     # ID str used for new translations
+              desc:str=None     # Optional description
+            )->Dict:
         """
         Checks for an English only istr, and performs a lookup
         if no translations are present.
@@ -289,7 +351,7 @@ class Translator:
                 have_translations = True
                 break
         if not have_translations:
-            newistr = self.lookup_phrase(en)
+            newistr = self.lookup_phrase(en, key_match, context, _id, desc)
             if newistr:
                 #print(f"translator.check found {newistr}")
                 return newistr
@@ -304,7 +366,60 @@ class Translator:
                 for s in sorted(self.translations_unmatched):
                     print(s, file=outfile)
 
+    def put_new(self, filename):
+        """
+        If there were any new unmatched translations created, write them
+        as a json file as a template for translations.json
+        """
+        if self.new_translations:
+            with open(filename,'w', encoding='utf-8') as out:
+                json.dump({"translations":self.new_translations}, out,
+                          sort_keys=True, indent=4, ensure_ascii=False)
+                out.write("\n")
 
+
+    def form_new_translation(self,
+            en:str,             # English phrase
+            context:str=None,   # Context attribute or name
+            desc:str=None,      # Description to add
+            _id:str=None        # ID to possibly use to make a label
+            ):      # A formed dictionary element to append
+        """
+        A new empty translation dict is created with the en string and null strings
+        for added languages. A label is formed from the context string, value,
+        and ID.
+        """
+        # Skip unless we have a context
+        if not context:
+            return
+
+        # Get a label to use
+        label = reform_label(context, en, _id)
+        # Skip if label maps to none
+        if not label or label in self.new_translations:
+            return
+
+        # Map numbers
+        en, n = re.subn(r'\d+','{number}',en)
+        if n:
+            if n>1:
+                # append a sequence
+                count = 0
+                def inc_num(m):
+                    count += 1
+                    return f"{{number{count}}}"
+                en = re.sub(r'{number}', inc_num, en)
+            params = re.findall(r'\{([_a-zA-Z]\w*)\}',en)
+        else:
+            params = None
+
+        t = { 'en':en, **self.empty_translations }
+        if desc:
+            t['_desc'] = re.sub(r'\d+','{number}',desc)
+        if params:
+            t['_params'] = params
+
+        self.new_translations[label] = t
 
 
 

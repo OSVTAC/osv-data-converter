@@ -46,8 +46,7 @@ VERSION='0.0.1'     # Program version
 NOPP_JSON_DUMP_ARGS = dict(sort_keys=False, separators=(',\n',':'), ensure_ascii=False)
 DEFAULT_JSON_DUMP_ARGS = dict(sort_keys=True, indent=4, ensure_ascii=False)
 
-SKIP_BLANK_TRANS = False
-
+KEEP_BLANK_TRANS = False
 
 TRANSLATIONS_FILE = (os.path.dirname(__file__)+
                      "/../submodules/osv-translations/translations.json")
@@ -115,26 +114,10 @@ def convjson(j, context=""):
 
         en = v['en']
         foundTrans = en
-        t = translator.lookup_phrase(en)
+        t = translator.lookup_phrase(en, context=context,
+                                     _id=j.get('_id',None),
+                                     desc=j.get('description',None))
         if not t:
-            if en not in not_found:
-                if context == 'party_names':
-                    label = f"party_{j['_id']}"
-                elif context == "result_stat_types":
-                    label = map_label("category",en)
-                elif context=="voting_groups":
-                    label = map_label("category",en)
-
-                new_trans[label] = js = {
-                    "en": en,
-                    "es": "",
-                    "tl": "",
-                    "zh": ""
-                }
-                if "description" in j:
-                    js['_desc'] = j["description"]
-
-            not_found.add(en)
             continue
 
         attrnames_found.add(k)
@@ -166,12 +149,10 @@ def convjson(j, context=""):
 
 
 # Get the translator with loaded translation database
-translator = Translator(TRANSLATIONS_FILE)
+translator = Translator(TRANSLATIONS_FILE, keep_null_translations=KEEP_BLANK_TRANS)
 
 # Keep a list of the attributes translated
 attrnames_found = set()
-not_found = set()
-new_trans = {}
 
 for f in args.infile:
     if f.endswith('.bak'):
@@ -202,10 +183,10 @@ for f in args.infile:
 
 if attrnames_found:
     print(f"Attributes Found: {attrnames_found}")
-if attrnames_found:
-    print(f"{len(not_found)} Translations not Found")
 
-if new_trans:
-    with open("translations-new.json",'w', encoding='utf-8') as out:
-        json.dump({"translations":new_trans}, out, **json_dump_args)
-        out.write("\n")
+unmatched = len(translator.translations_unmatched)
+if unmatched:
+    print(f"{unmatched} Translations not Found")
+
+translator.put_new("translations-new.json")
+
