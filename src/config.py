@@ -178,7 +178,7 @@ def config_str_dict(d:Dict[str,List[str]])->Dict[str,List[str]]:
     elif not isinstance(d,dict):
         raise InvalidConfig(f"Invalid Config Dictionary")
     else:
-        # Validate each dict entry as list of str
+        # Validate each dict entry as key,value of str
         for k,v in d.items():
             if v is None:
                 d[k] = v = ''

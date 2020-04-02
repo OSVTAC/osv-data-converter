@@ -18,13 +18,6 @@ DESCRIPTION = """\
 Reads the distnames.tsv, computes a classification, then creates the
 distclass.tsv according to the config-fixnames.yaml.
 
-Reads the following files:
-  * ems-raw.zip/CFMJ001_ContestData.tsv
-  * ems-raw.zip/CFMJ001_ContestCandidateData.tsv
-
-Creates the following files:
-  * contlist-orig.tsv
-  * candlist-orig.tsv
 """
 VERSION='0.0.1'     # Program version
 
@@ -93,7 +86,8 @@ with TSVReader("distnames.tsv", validate_header=distnames_header) as r:
 
             for (District_Code, District_Name, District_Short_Name) in r.readlines():
 
-                c = eval_prefix_map(District_Code, config.district_code_classification)
+                c = eval_prefix_map(District_Code.upper(),
+                                    config.district_code_classification)
 
                 if c==None:
                     c = ''

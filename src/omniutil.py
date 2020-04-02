@@ -23,7 +23,8 @@ import re
 from typing import Union, List, Pattern, Match, Dict, IO, AnyStr
 
 def form_bt_suffix(
-    s:Dict      # Style object with code and name
+    s:Dict,             # Style object with code and name
+    bt_digits:int=3     # Zero fill length
     ):
     """
     Converts various conventions for file naming in omniballot to a normalized
@@ -46,6 +47,6 @@ def form_bt_suffix(
         else:
             bt = s["code"]
 
-    bt = bt.zfill(3)
+    bt = bt.zfill(bt_digits)
     return  f'{bt}{party}{suff}'
 

@@ -514,15 +514,38 @@ def merge_titles(
 
     return '~'.join([base_title]+[t['en'] for t in titles[1:]])
 
-def clean_paragraphs(paragraphs:List[Dict]):
+re_strong_pat = re.compile(r'<strong>\s*(.*?)\.?\s*</strong>(?:\s*<br/?>\s*)?')
+
+def clean_paragraphs(
+        paragraphs:List[Dict],      # Paragraphs to clean
+        title:Dict,                 # Heading to check for duplicate
+        ):
     """
     Remove superflous <p>..</p> wrapper
+    Remove duplicate headings in <strong>
     """
     for p in paragraphs:
+        m = re_strong_pat.search(p['en'])
+        remove_strong = title and m and m.group(1) == title['en']
+        if p['en'].count("Voter-Nominated"):
+            print(f"remove_strong={remove_strong} for {p['en']}")
         for lang in p.keys():
             if p[lang].count("<p") > 1:
                 continue
             p[lang] = re.sub(r'^\s*<p\b[^<>]*>\s*(.*?)\s*</p>\s*$',r"\1", p[lang])
+            if p[lang].count("<strong") == 1:
+                p[lang] = re.sub(r'^<strong>\s*(.*?)\s*</strong>$',r"\1", p[lang])
+            if remove_strong:
+                m = re_strong_pat.match(p[lang])
+                if m:
+                    if not title.get(lang,None):
+                        # Extract the heading from removed text
+                        title[lang] = m.group(1)
+                    else:
+                        print(f"Warning: Heading mismatch in {title['en']}: {titles[lang]} != {p[lang]}")
+                    p[lang] = re_strong_pat.sub('',p[lang])
+                else:
+                    print(f"Warning: Heading missing for {title['en']}: {titles[lang]} != {p[lang]}")
 
 def extract_titles(paragraphs:List[Dict])->List[Dict]:
     """
@@ -544,10 +567,13 @@ def extract_titles(paragraphs:List[Dict])->List[Dict]:
                 # Save the extracted title
                 istr[lang] = m.group(1)
                 return ''
-            p[lang] = re.sub(r'^(?:<p\b[^<>]*>)?\s*<strong>\s*(.*?)\s*</strong>\s*(?:</p>|<br \s*/?>)',
+            if p[lang].count("<p") == 1:
+                p[lang] = re.sub(r'^\s*<p\b[^<>]*>\s*(.*?)\s*</p>\s*$',r"\1", p[lang])
+            p[lang] = re.sub(r'^(?:<p\b[^<>]*>)?\s*<strong>\s*(.*?)\.?\s*</strong>\s*(?:</p>|<br\s*/?>)?',
                                 append_sub, p[lang], count=1)
         if istr:
             titles.append(istr)
+    #print("extract_titles:",titles,paragraphs)
     return titles
 
 def conv_bt_json(j:Dict, bt:str):
@@ -564,9 +590,8 @@ def conv_bt_json(j:Dict, bt:str):
     election_title_en = election_title['en']
     # In 2019 the admin_title has the date, before the date was a prefix on election_title
     election_admin_title = j['election'].get('admin_title',"")
-    m = re.match(r'(\d{4}-\d\d-\d\d) ',election_admin_title)
-    if not m:
-        m = re.match(r'(\d{4}-\d\d-\d\d) ',election_title_en)
+    mt = re.match(r'(\d{4}-\d\d-\d\d) ',election_title_en)
+    m = mt if mt else re.match(r'(\d{4}-\d\d-\d\d) ',election_admin_title)
     if m:
         # 2019 format where the date prefix is in admin_title only
         date_prefix = m.group(1)
@@ -582,6 +607,10 @@ def conv_bt_json(j:Dict, bt:str):
         else:
             raise FormatError(f"Unmatched election date in '{election_title_en}' admin={election_admin_title}")
 
+    if mt:
+        # Trim date from the election title
+        for lang,s in election_title.items():
+            election_title[lang] = re.sub(r'(\d{4}-\d\d-\d\d) ','',s)
 
     if election_date:
         if date_prefix != election_date:
@@ -610,7 +639,7 @@ def conv_bt_json(j:Dict, bt:str):
             # Titles can be in <strong> header prefix
             titles = extract_titles(paragraphs)
 
-        clean_paragraphs(paragraphs)
+        clean_paragraphs(paragraphs, titles[0])
 
         # Save title and text for RCV, ignore choices after first
         if lastrcvtitle:
@@ -909,7 +938,7 @@ def conv_bt_json(j:Dict, bt:str):
                         "sequence": cand_mapped_seq
                         }
                     if party_istr:
-                        candj['candidate_party'] = party_istr
+                        candj['ballot_party_label'] = party_istr
                         party_id = partyName2ID[party]
                         if party_id:
                             candj['candidate_party_id'] = party_id
@@ -1163,6 +1192,13 @@ writein_header = [
     "contest_id|candidate_order|candidate_id|candidate_type"\
         "|candidate_full_name|candidate_party_id|is_writein_candidate",
     ]
+use_2018_format = re.search(r'/2018-\d\d-\d\d/',os.getcwd())
+if use_2018_format:
+    writein_header[1] = "contest_id|contest_id_eds|candidate_order"\
+    "|candidate_id|candidate_type"\
+    "|candidate_full_name|candidate_party_id|is_writein_candidate"
+
+
 for wiformat in range(1,len(writeinfiles)):
     filename = writeinfiles[wiformat]
     if not os.path.isfile(filename): continue
@@ -1178,8 +1214,13 @@ for wiformat in range(1,len(writeinfiles)):
                     continue
             else:
                 # Extract from the SOV XLS
-                (ContestId, candidate_order, Id, candidate_type, Description,
-                 candidate_party_id, is_writein_candidate) = cols
+                if use_2018_format:
+                    (ContestId, contest_id_eds, candidate_order,
+                     Id, candidate_type, Description,
+                     candidate_party_id, is_writein_candidate) = cols
+                else:
+                    (ContestId, candidate_order, Id, candidate_type, Description,
+                     andidate_party_id, is_writein_candidate) = cols
                 ExternalId = 'WI'+Id
                 if is_writein_candidate != 'Y':
                     continue;
@@ -1210,7 +1251,7 @@ except:
 os.makedirs("bt", exist_ok=True)
 
 for sid, s in lookups['styles'].items():
-    bt = form_bt_suffix(s)
+    bt = form_bt_suffix(s,config.bt_digits)
     print(f'Reading Style {sid} for bt {bt} ({s["code"]}/{s["name"]})')
     with open(f'bt/bt{bt}.json') as f:
         j = json.load(f)

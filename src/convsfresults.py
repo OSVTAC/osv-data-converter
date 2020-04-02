@@ -975,7 +975,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
         '_results_format':RESULTS_FORMAT,
         "_reporting_time": datetime.now().isoformat(timespec='seconds',sep=' '),
         "_results_id": results_id,
-        "_results_title": translator.get(results_title),
+        "_results_title": translator.get(results_title,context="results_title"),
         "turnout": {},
         'contests': results_contests
         }
@@ -1880,7 +1880,6 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         for rsid in resultlist:
                             conteststat['result_stats'].append({
                                 "_id": rsid,
-                                "heading": VOTING_STATS[rsid],
                                 "results":[totals[j][i] for j in range(ntotals)]
                                 })
                             i += 1
@@ -1888,7 +1887,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         for candid in candids:
                             conteststat['choices'].append({
                                 "_id": candid,
-                                "ballot_title": candnames[k],
+                                "heading": candnames[k],
                                 "winning_status": winning_status_names[
                                     winning_status.get(candid,'')],
                                 "success": cand_success.get(candid,''),
@@ -1998,7 +1997,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
     # End reading zip file
   # End loop over readDictrict
 
-translator.print_unmatched("unmatched-translations.txt")
+translator.put_new("unmatched-translations.json")
 
 
 
