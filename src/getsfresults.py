@@ -136,6 +136,9 @@ def processfile(url, subdir, filename):
     if re.match(r'^CVR_Export_\w+\.zip',filename):
         if not args.nocvr:
             getfile(url,"CVR_Export.zip")
+    elif re.match(r'_ICC_Logs.zip',filename):
+        if not args.nocvr:
+            getfile(url,"filename")
     else:
         getfile(url,"resultdata-raw/"+filename)
     # break; # for debug

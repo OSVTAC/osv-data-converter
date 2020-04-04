@@ -342,7 +342,7 @@ class TSVWriter:
         Join a list of columns with \t and append \n
         """
         args = [s.translate(self.map_data) if self.map_data else s
-                for s in map(str,args)]
+                for s in [str(v) if v!=None else "" for v in args]]
         line = self.sep.join(args)
         if self.strip_trailing_sep:
             line = line.rstrip(self.sep)

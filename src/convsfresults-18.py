@@ -184,7 +184,25 @@ def strnull(x:str)->str:
     """
     return "" if x == None else x
 
+intQ = Union[int,None]
 
+def intNone(v:str)->intQ:
+    """
+    Convert null string to None
+    """
+    return None if v=='' else int(v)
+
+def addQ(a:intQ,b:intQ)->intQ:
+    """
+    Add with values that can be none
+    """
+    return None if a==None or b==None else a+b
+
+def subQ(a:intQ,b:intQ)->intQ:
+    """
+    Subtract wiht values that can be none
+    """
+    return None if a==None or b==None else a-b
 
 args = parse_args()
 
@@ -309,7 +327,7 @@ def checkDuplicate(d:Dict[str,str],  # Dict to set/check
         print(f"Duplicate {msg} for {key}->{val}!={d[key]} at {linenum}")
         raise
 
-def loadEligible()->str:
+def loadEligible()->int:
     """
     Reads the ../vr/county.tsv file to locate eligible voters by county.
     Returns the count as a string, a numbmer or null.
@@ -318,7 +336,7 @@ def loadEligible()->str:
         with TSVReader("../vr/county.tsv") as reader:
             for l in reader.readlines():
                 if l[0] == "San Francisco":
-                    return l[1]
+                    return int(l[1])
     except Exception as ex:
         pass
     return ""
@@ -723,12 +741,15 @@ with ZipFile("resultdata-raw.zip") as rzip:
         contest_order = 0
         contest_name = contest_name_line = ""
 
+        total_registration = int(total_registration)
+
         # Enter turnout
         results_json['turnout'] = {
             "_id": "TURNOUT",
             "no_voter_precincts": [],
-            "precincts_reporting": total_precincts_reporting,
-            "total_precincts": total_precincts,
+            "precincts_reporting": int(total_precincts_reporting),
+            "total_precincts": int(total_precincts),
+            "eligible_voters": int(eligible_voters),
             #"reporting_time": report_time_str,
             "result_stats": [
                 {
@@ -745,13 +766,13 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     "_id": "RSCst",
                     "heading": "Ballots Cast",
                     "results": [
-                        str(total_precinct_ballots+total_mail_ballots),
-                        str(total_precinct_ballots), str(total_mail_ballots)]
+                        int(total_precinct_ballots+total_mail_ballots),
+                        int(total_precinct_ballots), int(total_mail_ballots)]
                 },
                 {
                     "_id": "RSRej",
                     "heading": "Ballots Challenged",
-                    "results": ["0","0","0"]
+                    "results": [0,0,0]
                 }
             ]
         }
@@ -901,7 +922,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
 
                 # The only consolidation definition is Pct nnnn/nnnn for 2 precincts
                 if cols[0] == "Grand Totals":
-                    area_id = "ALLPCTS"
+                    area_id = "ALL"
                     isvbm_precinct = False
                     if indistrict:
                         # Append the contest ID to the precinct ID list
@@ -910,6 +931,10 @@ with ZipFile("resultdata-raw.zip") as rzip:
                             pctcontest[pctids].append(contest_id)
                         else:
                             pctcontest[pctids] = [contest_id]
+
+                        conteststat['results_summary'] = [
+                            s.strip() for s in [headerline] +
+                                contest_totallines[:ntotals]]
 
                         flushcontest(contest_order, contest_id, contest_name,
                                  headerline, contest_rcvlines,
@@ -970,7 +995,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                 # Map the subtotal_type
                 if cols[1] == 'Election Day':
                     subtotal_type = 'ED'
-                    if area_id != "ALLPCTS":
+                    if area_id != "ALL":
                         checkDuplicate(pctturnout_reg, precinct_name_orig, RSReg,
                                     "Registration")
                         checkDuplicate(pctturnout_ed, precinct_name_orig, RSCst,
@@ -980,7 +1005,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         ed_precincts += 1
                 elif cols[1] == 'VBM':
                     subtotal_type = 'MV'
-                    if area_id != "ALLPCTS":
+                    if area_id != "ALL":
                         checkDuplicate(pctturnout_reg, precinct_name_orig, RSReg,
                                         "Registration")
                         checkDuplicate(pctturnout_mv, precinct_name_orig, RSCst,
@@ -999,7 +1024,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
 
                 # Compute total votes
                 total_votes = sum(map(int,cols[7:-2]))
-                RSTot = str(total_votes)
+                RSTot = int(total_votes)
 
                 # Compute ignored
                 RSExh = "0"
@@ -1008,10 +1033,10 @@ with ZipFile("resultdata-raw.zip") as rzip:
                 total_ballots = int((int(RSTot)+int(RSUnd)+int(RSOvr))/vote_for)
                 if False:
                     # Flaw in sov - counts are from card 0 precinct sum
-                    RSRej = str(total_ballots - int(RSCst))
-                    RSCst = str(total_ballots)
+                    RSRej = int(total_ballots - int(RSCst))
+                    RSCst = int(total_ballots)
                 else:
-                    RSRej = str(int(RSCst)-total_ballots)
+                    RSRej = int(int(RSCst)-total_ballots)
 
                 if hasrcv:
                     stats = [area_id, subtotal_type, RSReg, RSCst,
@@ -1028,7 +1053,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     cand_start_col = len(stats)
                     stats.extend(cols[7:-2])
                 outline = jointsvline(*stats)
-                if area_id == "ALLPCTS":
+                if area_id == "ALL":
                     if subtotal_type == 'TO':
                         # Put grand totals first
                         if args.verbose and RSRej!="0":
@@ -1150,22 +1175,28 @@ with ZipFile("resultdata-raw.zip") as rzip:
                             conteststat['result_stats'].append({
                                 "_id": rsid,
                                 "heading": VOTING_STATS[rsid],
-                                "results":[totals[j][i] for j in range(ntotals)]
+                                "results":[int(totals[j][i]) for j in range(ntotals)]
                                 })
                             i += 1
                         k = 0
+                        cont_winning_status = defaultdict(str)
                         for candid in candids:
+                            status = winning_status_names[winning_status.get(candid,'')]
+                            if status != ('rcv_eliminated' if rcv_rounds
+                                          else 'not_winning'):
+                                cont_winning_status[status]+=f"\t{candid}:{candnames[k]}"
                             conteststat['choices'].append({
                                 "_id": candid,
                                 "ballot_title": candnames[k],
-                                "winning_status": winning_status_names[
-                                    winning_status.get(candid,'')],
+                                "winning_status": status,
                                 "success": cand_success.get(candid,''),
-                                "results":[totals[j][i] for j in range(ntotals)]
+                                "results":[int(totals[j][i]) for j in range(ntotals)]
                                 })
                             i += 1
                             k += 1
 
+                        conteststat['winning_status']= {
+                            k:v.strip() for (k,v) in cont_winning_status.items()}
                         results_contests.append(conteststat)
 
                         # Form a line with summary stats by ID
@@ -1257,7 +1288,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
 
 
         # End Loop over input lines
-        newtsvline(pctturnout, "ALLPCTS", reg_total,
+        newtsvline(pctturnout, "ALL", reg_total,
                    ed_total+mv_total, ed_total, mv_total)
 
         candlist_sov = []

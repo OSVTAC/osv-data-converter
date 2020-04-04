@@ -45,7 +45,7 @@ from translations import Translator
 from datetime import datetime
 from collections import OrderedDict, namedtuple, defaultdict
 
-from typing import List, Pattern, Match, Dict, Set, TextIO
+from typing import List, Pattern, Match, Dict, Set, TextIO, Union
 from zipfile import ZipFile
 
 DESCRIPTION = """\
@@ -131,6 +131,7 @@ winning_status_names = {
     'D':'tied_not_winner', 'R': 'to_runoff', 'S':'tied_selected_for_runoff',
     'E':'rcv_eliminated', 'N':'not_winning', '':''
 }
+
 
 VOTING_STATS = OrderedDict([
     ('RSTot', 'Total Votes'),       # Sum of valid votes reported
@@ -290,6 +291,8 @@ def dict_add(d:Dict, k, v:int):
     """
     Same as d[k]+=v but works if k is not in d
     """
+    if v==None:
+        return
     d[k] = d.get(k,0) + v
 
 def unpack(
@@ -525,7 +528,7 @@ def addGrandTotal(grand_total,      # computed total lines
                   cols):            # Next subtotal line
     subtotal_type = cols[1]
     if subtotal_type not in grand_total:
-        grand_total[subtotal_type] = ['ALLPCTS']+cols[1:]
+        grand_total[subtotal_type] = ['ALL']+cols[1:]
     else:
         t = grand_total[subtotal_type]
         if len(t)!=len(cols):
@@ -857,24 +860,40 @@ RSRegSave_MV['CONG13']=RSRegSave_ED['CONG13']=RSRegSave_TO['CONG13']=0
 
 CrossoverParties = {'DEM','AI','LIB','NPP'}
 
+intQ = Union[int,None]
+
+def intNone(v:str)->intQ:
+    """
+    Convert null string to None
+    """
+    return None if v=='' else int(v)
+
+def addQ(a:intQ,b:intQ)->intQ:
+    """
+    Add with values that can be none
+    """
+    return None if a==None or b==None else a+b
+
+def subQ(a:intQ,b:intQ)->intQ:
+    """
+    Subtract wiht values that can be none
+    """
+    return None if a==None or b==None else a-b
 
 # Load turnout by party
 turnoutfile = f'{OUT_DIR}/turnout.tsv'
-partyTurnoutColumns = []
-if os.path.isfile(turnoutfile):
+partyTurnout = []
+have_turnout = os.path.isfile(turnoutfile)
+if have_turnout:
     with TSVReader(turnoutfile) as f:
         # cols area_id|subtotal_type|result_stat|ALL|AI|...
         # f.header is contains party headings for cols[3:]
         partyHeaders = f.header[3:]
-        partyTurnout = [ [] for p in partyHeaders]
-        #print(f"Partyheaders={partyHeaders}")
+        partyTurnout.append('\t'.join(f.header))
         for cols in f.readlines():
             area_id, subtotal_type, result_stat = cols[:3]
-            if area_id=='ALLPCTS':
-                # Copy transposed stats by party
-                partyTurnoutColumns.append(f"{subtotal_type}~{result_stat}")
-                for i,v in enumerate(cols[3:]):
-                    partyTurnout[i].append(int(v))
+            if area_id=='ALL':
+                partyTurnout.append('\t'.join(cols))
 
             if result_stat=='RSReg':
                 if subtotal_type=='TO':
@@ -891,12 +910,13 @@ if os.path.isfile(turnoutfile):
             for i, party in enumerate(partyHeaders):
                 if party=='ALL':
                     party=''
-                rs[area_id+party]=v=int(cols[3+i])
+                rs[area_id+party]=v=intNone(cols[3+i])
                 if party.endswith('NPP'):
                     if party != 'NPP':
                         party = party[:-3]
                 if party in CrossoverParties:
                     dict_add(rs, area_id+party+'ALL', v)
+
 
 # Now RSRegSave_MV and RSRegSave_TO have VBM and total registration
 # by area_id or area_id+party suffix. The party+NPP suffix has VBM issued
@@ -1356,18 +1376,18 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     if readDictrict:
                         skip_to_category = True
                         continue
-                    area_id = "ALLPCTS"
+                    area_id = "ALL"
                     isvbm_precinct = False
                     subtotal_col = 0
                     skip_area = False
-                    #if args.debug: print(f"ALLPCTS at {linenum}")
+                    #if args.debug: print(f"ALL at {linenum}")
                     continue
                 elif re.match(r'^(San Francisco|Electionwide) - Total',cols[0]):
-                    area_id = "ALLPCTS"
+                    area_id = "ALL"
                     isvbm_precinct = False
                     subtotal_col = -1
                     skip_area = True
-                    #if args.debug: print(f"ALLPCTS at {linenum}:{line}")
+                    #if args.debug: print(f"ALL at {linenum}:{line}")
 
                 elif next_is_district:
                     # This should be a district heading
@@ -1468,7 +1488,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     RSOvr = convRSOvr(RSOvr)
                     total_votes = RSTot = int(float(cols[total_col]))
                     RSCst = total_ballots = int(RSOvr)+int((int(RSTot)+int(RSUnd))/vote_for)
-                    if area_id == 'ALLPCTS':
+                    if area_id == 'ALL':
                         # Use computed totals
                         RSReg = grand_total[subtotal_type][2] if grand_total else 0
                     else:
@@ -1491,17 +1511,17 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     RSRej = RSExh = 0
                 else:
                     (RSCst, RSReg, RSUnd, RSOvr) = [int(float(cols[i])) for i in [1,2,4,5]]
-                    RSOvr = convRSOgitvr(RSOvr)
+                    RSOvr = convRSOvr(RSOvr)
                     total_votes = RSTot = int(float(cols[total_col]))
                     total_ballots = int(RSOvr)+int((int(RSTot)+int(RSUnd))/vote_for)
-                    RSRej = str(int(RSCst)-total_ballots)
+                    RSRej = int(int(RSCst)-total_ballots)
                     # RSRej not available
                     RSExh = 0
 
-                RSRegNP = RSRegSave_TO[area_id]
-                no_voter_precinct = RSRegNP==0 and not (zero_voter_contest or
-                                                      isvbm_precinct or
-                                                      withzero or zero_report)
+                no_voter_precinct = (area_id in RSRegSave_TO and
+                                     RSRegSave_TO[area_id]==0 and
+                                     not (zero_voter_contest or
+                                          isvbm_precinct or withzero or zero_report))
 
                 #if RSReg==0:
                     #print(f"no_voter_precinct {no_voter_precinct} {area_id} {contest_party} {subtotal_type}")
@@ -1528,7 +1548,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                 # Map the subtotal_type
                 if subtotal_col >= 0:
                     if subtotal_type == 'ED':
-                        if area_id != "ALLPCTS":
+                        if area_id != "ALL":
                             checkDuplicate(pctturnout_reg, precinct_name_orig, RSReg,
                                         "Registration")
                             checkDuplicate(pctturnout_ed, precinct_name_orig, RSCst,
@@ -1541,7 +1561,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                                 continue    # Skip ED reporting for VBM-only precincts
                             ed_precincts += 1
                     elif subtotal_type == 'MV':
-                        if area_id != "ALLPCTS":
+                        if area_id != "ALL":
                             checkDuplicate(pctturnout_reg, precinct_name_orig, RSReg,
                                             "Registration")
                             checkDuplicate(pctturnout_mv, precinct_name_orig, RSCst,
@@ -1563,7 +1583,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     RSRegSave[subtotal_type][area_id] = 0
                     continue
                 if in_turnout:
-                    if area_id in RSRegSave_MV:
+                    if have_turnout and area_id in RSRegSave_MV:
                         #Convert total registration to MV & ED, MV is first
                         if isvbm_precinct:
                             if subtotal_type == 'ED':
@@ -1581,12 +1601,16 @@ with ZipFile("resultdata-raw.zip") as rzip:
                             RSRegSave_TO[area_id] = RSReg
                             for p in Party_IDs:
                                 area_party = area_id+p
-                                RSRegSave_ED[area_party] = RSRegSave_TO[area_party] - RSRegSave_MV[area_party]
+                                RSRegSave_ED[area_party] = subQ(
+                                    RSRegSave_TO[area_party],
+                                    RSRegSave_MV[area_party])
 
                         if subtotal_type == 'MV' or subtotal_type == 'ED':
                              for p in Party_IDs:
                                 area_party = area_id+p
-                                RSRegSave_ED[area_party] = RSRegSave_TO[area_party] - RSRegSave_MV[area_party]
+                                RSRegSave_ED[area_party] = subQ(
+                                    RSRegSave_TO[area_party],
+                                    RSRegSave_MV[area_party])
 
                         #print(f"{subtotal_type}:RSRegSave_MV[{area_id}]={RSRegSave_MV[area_id]}/{RSReg}")
                     else:
@@ -1601,7 +1625,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         if RSCst:
                             processed_done += 1
 
-                    if area_id != "ALLPCTS":
+                    if area_id != "ALL":
                         addGrandTotal(grand_total,stats)
                     elif readDictrict:
                         continue
@@ -1609,7 +1633,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         if grand_totals_wrong:
                             total_precinct_ballots = grand_total['ED'][3]
                             total_mail_ballots = grand_total['MV'][3]
-                            RSRegSave_ED['ALLPCTS'] = total_precinct_registration = grand_total['ED'][2]
+                            RSRegSave_ED['ALL'] = total_precinct_registration = grand_total['ED'][2]
                             RSRegSave_ED['MV'] = total_mail_registration = grand_total['MV'][2]
 
                             #print(f'Turnout grand totals {total_precinct_ballots}/{total_mail_ballots}\n')
@@ -1629,6 +1653,10 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         total_mail_ballots = RSCst
                     else:
                         if have_EDMV:
+                            if area_id not in RSRegSave_ED:
+                                RSRegSave_ED[area_id] = RSReg
+                            if area_id not in RSRegSave_MV:
+                                RSRegSave_MV[area_id] = RSReg
                             newtsvline(pctturnout, area_id, RSReg,
                                 RSRegSave_ED[area_id], RSRegSave_MV[area_id],
                                 RSCst, total_precinct_ballots, total_mail_ballots)
@@ -1637,7 +1665,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                                 RSCst)
 
 
-                    if area_id == "ALLPCTS" and subtotal_type == 'TO':
+                    if area_id == "ALL" and subtotal_type == 'TO':
                         # Enter turnout
                         total_registration = RSReg
                         processed_done = summary_reporting.get("TURNOUT",processed_done)
@@ -1650,6 +1678,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                             "no_voter_precincts": [nv_pctlist],
                             "precincts_reporting": int(processed_done),
                             "total_precincts": int(total_precincts),
+                            "eligible_voters": int(eligible_voters),
                             "result_stats": [
                                 {
                                     "_id": "RSEli",
@@ -1666,13 +1695,13 @@ with ZipFile("resultdata-raw.zip") as rzip:
                                     "_id": "RSCst",
                                     "heading": "Ballots Cast",
                                     "results": [
-                                        str(total_precinct_ballots+total_mail_ballots),
-                                        str(total_precinct_ballots), str(total_mail_ballots)]
+                                        int(total_precinct_ballots+total_mail_ballots),
+                                        int(total_precinct_ballots), int(total_mail_ballots)]
                                 },
                                 {
                                     "_id": "RSRej",
                                     "heading": "Ballots Challenged",
-                                    "results": ["0","0","0"]
+                                    "results": [0,0,0]
                                 }
                             ]
                             }
@@ -1691,29 +1720,24 @@ with ZipFile("resultdata-raw.zip") as rzip:
                                 {
                                     "_id": "RSReg",
                                     "heading": "Registered Voters",
-                                    "results": [str(RSRej)]
+                                    "results": [int(RSRej)]
                                 },
                                 {
                                     "_id": "RSCst",
                                     "heading": "Ballots Cast",
-                                    "results": [str(RSCst)]
+                                    "results": [int(RSCst)]
                                 },
                                 {
                                     "_id": "RSRej",
                                     "heading": "Ballots Challenged",
-                                    "results": [str(RSRej)]
+                                    "results": [int(RSRej)]
                                 }
                             ]
                         }
                         # Unused: "reporting_time": report_time_str,
 
-                        if partyTurnoutColumns:
-                            js_turnout['party_turnout_results_ids'] = partyTurnoutColumns
-                            js_turnout['party_turnout'] = [
-                                    {'party_id':party_id,
-                                    'results': partyTurnout[i] }
-                                    for i, party_id in enumerate(partyHeaders)
-                                ]
+                        if partyTurnout:
+                            js_turnout['results_summary'] = partyTurnout
                     continue
                 else:
                     if hasrcv:
@@ -1738,9 +1762,9 @@ with ZipFile("resultdata-raw.zip") as rzip:
                             processed_done += 1
 
                 outline = jointsvline(*stats)
-                if area_id == "ALLPCTS":
+                if area_id == "ALL":
                     if args.debug:
-                        print(f"ALLPCTS:{subtotal_type} at {linenum}")
+                        print(f"ALL:{subtotal_type} at {linenum}")
 
                     if subtotal_type == 'TO':
                         # Put grand totals first
@@ -1777,13 +1801,29 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         conteststat = {
                             'choices': [],
                             'precincts_reporting': int(processed_done),
+                            'total_precincts': int(total_precincts),
                             'result_stats': [],
-                            'total_precincts': int(total_precincts)
                             }
                         conteststat['_id'] = contest_id
                         #Unused: conteststat['reporting_time'] = report_time_str
                         conteststat['no_voter_precincts'] = nv_pctlist
                         conteststat['rcv_rounds'] = rcv_rounds
+
+                        if rcv_rounds>1:
+                            # Compute
+                            n = rcv_rounds-1
+                            rcv_max_cols = list(final_cols)
+                            rcv_eliminations = []
+                            for line in contest_rcvlines[1:]:
+                                elim = ''
+                                for i,v in enumerate(line.strip('\n').split('\t')):
+                                    if rcv_max_cols[i]== '' and v !='':
+                                        rcv_max_cols[i] = v
+                                        ic = i-cand_start_col
+                                        elim += f"\t{candids[ic]}:{candnames[ic]}"
+                                rcv_eliminations.append(elim)
+                            rcv_max_cols[0]='RCVMAX'
+
 
                         if total_votes:
                             approval_required = approval_required_by_omni_id.get(
@@ -1884,19 +1924,27 @@ with ZipFile("resultdata-raw.zip") as rzip:
                                 })
                             i += 1
                         k = 0
+                        cont_winning_status = defaultdict(str)
                         for candid in candids:
+                            status = winning_status_names[winning_status.get(candid,'')]
+                            if (status != 'rcv_eliminated' and
+                                status != 'not_winning'):
+                                cont_winning_status[status]+=f"\t{candid}:{candnames[k]}"
+
                             conteststat['choices'].append({
                                 "_id": candid,
                                 "heading": candnames[k],
-                                "winning_status": winning_status_names[
-                                    winning_status.get(candid,'')],
+                                "winning_status": status,
                                 "success": cand_success.get(candid,''),
                                 "results":[totals[j][i] for j in range(ntotals)]
                                 })
                             i += 1
                             k += 1
 
+                        conteststat['winning_status']= {
+                            k:v.strip() for (k,v) in cont_winning_status.items()}
                         results_contests.append(conteststat)
+
 
                         # Form a line with summary stats by ID
                         newtsvline(contstats, contest_id,
@@ -1910,6 +1958,17 @@ with ZipFile("resultdata-raw.zip") as rzip:
                             pctcontest[pctids].append(contest_id)
                         else:
                             pctcontest[pctids] = [contest_id]
+
+                        if rcv_rounds>1:
+                            conteststat['rcv_max_votes'] = '\t'.join(
+                                [str(s) for s in rcv_max_cols])
+                            rcv_eliminations.reverse()
+                            conteststat['rcv_eliminations'] = [
+                                s.strip() for s in rcv_eliminations]
+                        conteststat['results_summary'] = [
+                            s.strip('\n') for s in [headerline] +
+                                contest_rcvlines +
+                                contest_totallines[:ntotals]]
 
                         flushcontest(contest_order, contest_id, contest_name,
                                  headerline, contest_rcvlines,
@@ -1947,7 +2006,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                                  #for i in CardTurnOut]
                     #RSCst = max(CardsCast)
                     #RSVot = (EWM_turnout['Grand Total:'].get(ewmfield,'')
-                             #if area_id == 'ALLPCTS' else
+                             #if area_id == 'ALL' else
                              #EWM_turnout[area_id[3:].get(ewmfield,'')
                              #if area_id.startswith('PCT') else ''
 

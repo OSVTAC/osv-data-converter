@@ -514,7 +514,7 @@ def merge_titles(
 
     return '~'.join([base_title]+[t['en'] for t in titles[1:]])
 
-re_strong_pat = re.compile(r'<strong>\s*(.*?)\.?\s*</strong>(?:\s*<br/?>\s*)?')
+re_strong_pat = re.compile(r'<strong>\s*(.*?)\.?\s*</strong>(?:\s*<br */?>\s*)?')
 
 def clean_paragraphs(
         paragraphs:List[Dict],      # Paragraphs to clean
@@ -527,25 +527,24 @@ def clean_paragraphs(
     for p in paragraphs:
         m = re_strong_pat.search(p['en'])
         remove_strong = title and m and m.group(1) == title['en']
-        if p['en'].count("Voter-Nominated"):
-            print(f"remove_strong={remove_strong} for {p['en']}")
         for lang in p.keys():
             if p[lang].count("<p") > 1:
                 continue
             p[lang] = re.sub(r'^\s*<p\b[^<>]*>\s*(.*?)\s*</p>\s*$',r"\1", p[lang])
             if p[lang].count("<strong") == 1:
-                p[lang] = re.sub(r'^<strong>\s*(.*?)\s*</strong>$',r"\1", p[lang])
+                p[lang] = re.sub(r'^<strong>\s*(.*?)\.?\s*</strong>$',r"\1", p[lang])
             if remove_strong:
                 m = re_strong_pat.match(p[lang])
                 if m:
-                    if not title.get(lang,None):
-                        # Extract the heading from removed text
-                        title[lang] = m.group(1)
-                    else:
-                        print(f"Warning: Heading mismatch in {title['en']}: {titles[lang]} != {p[lang]}")
+                    t = title.get(lang,None)
+                    if not t:
+                            # Extract the heading from removed text
+                            title[lang] = m.group(1)
+                    elif t!=m.group(1):
+                            print(f"Warning: Heading mismatch in {title['en']}: {title[lang]} != {p[lang]}")
                     p[lang] = re_strong_pat.sub('',p[lang])
                 else:
-                    print(f"Warning: Heading missing for {title['en']}: {titles[lang]} != {p[lang]}")
+                    print(f"Warning: Heading missing for {title['en']}: {title[lang]} != {p[lang]}")
 
 def extract_titles(paragraphs:List[Dict])->List[Dict]:
     """
@@ -1305,7 +1304,7 @@ putfile("party-contests.tsv",
 
 # Build the area list
 arealist = [{
-    "_id": "ALLPCTS",
+    "_id": "ALL",
     "classification": "All",
     "name": "All Precincts",
     "short_name": "All Precincts"
