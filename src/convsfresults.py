@@ -1820,6 +1820,8 @@ with ZipFile("resultdata-raw.zip") as rzip:
                                     if rcv_max_cols[i]== '' and v !='':
                                         rcv_max_cols[i] = v
                                         ic = i-cand_start_col
+                                        if ic<0:
+                                            continue
                                         elim += f"\t{candids[ic]}:{candnames[ic]}"
                                 rcv_eliminations.append(elim)
                             rcv_max_cols[0]='RCVMAX'

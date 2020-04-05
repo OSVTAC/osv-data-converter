@@ -46,6 +46,7 @@ import io
 from typing import Dict, Tuple, List, TextIO, Union
 from collections import OrderedDict
 import logging
+from dataclasses import dataclass
 
 UTF8_ENCODING = 'utf-8'
 
@@ -100,6 +101,7 @@ def split_line(
     return [f.translate(mapdata) if mapdata else f for f in line.split(sep)]
 
 
+@dataclass
 class TSVReader:
 
     """
@@ -115,32 +117,25 @@ class TSVReader:
         line_num:   line number in file
     """
 
-    def __init__(self,
-                 path:str,              # filename to read
-                 sep:str=None,          # delimiter separating fields
-                 read_header:bool=True, # Read and save the header
-                 encoding:str=UTF8_ENCODING,
-                 binary_decode:bool=False,  # True for external decode
-                 opener=None,               # External opener
-                 validate_header:str=None): # Expected header
-        """
-        Creates a tsv reader object. The opened file is passed in as f
-        (so a with/as statement can provide a file open context).
-        If read_header is true, the first line is assumed to be a
-        header. If the sep column separating character is not supplied,
-        the characters '\t|,' will be searched in the header line (if
-        read) to automatically set the separator, otherwise tab is assumed.
+    """
+    Creates a tsv reader object. The opened file is passed in as f
+    (so a with/as statement can provide a file open context).
+    If read_header is true, the first line is assumed to be a
+    header. If the sep column separating character is not supplied,
+    the characters '\t|,' will be searched in the header line (if
+    read) to automatically set the separator, otherwise tab is assumed.
 
-        Args:
-          path: the path to open, as a path-like object.
-        """
-        self.path = path
-        self.sep = sep
-        self.read_header = read_header
-        self.encoding = encoding
-        self.opener = opener
-        self.binary_decode = binary_decode
-        self.validate_header = validate_header
+    Args:
+        path: the path to open, as a path-like object.
+    """
+    path:str               # filename to read
+    sep:str=None           # delimiter separating fields
+    read_header:bool=True  # Read and save the header
+    encoding:str=UTF8_ENCODING
+    binary_decode:bool=False   # True for external decode
+    trim_quotes:str=None       # Quote character to trim
+    opener:open=None           # External opener
+    validate_header:str=None   # Expected header
 
     def __enter__(self):
         self.f = (self.opener.open(self.path) if self.opener else
@@ -195,6 +190,10 @@ class TSVReader:
             line = line.decode(self.encoding)
 
         l = split_line(line,self.sep)
+        if self.trim_quotes:
+            l = [s[1:-1] if len(s)>=2 and
+                     s[0] in self.trim_quotes and s[-1] in self.trim_quotes
+                 else s for s in l]
         if len(l) < self.num_columns:
             # Extend the list with null strings to match header count
             l.extend([ '' ] * (self.num_columns - len(l)))

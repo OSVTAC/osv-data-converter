@@ -41,8 +41,8 @@ from re2 import re2
 
 # Library imports
 from datetime import datetime
-from collections import OrderedDict
-from typing import List, Pattern, Match, Dict
+from collections import OrderedDict, namedtuple, defaultdict
+from typing import List, Pattern, Match, Dict, Union
 from zipfile import ZipFile
 
 DESCRIPTION = """\
@@ -63,6 +63,17 @@ Creates the following files:
 #TODO:
 # -
 
+###################################
+
+# Types defined to document usage
+
+Area_Id = str           # PCTnnn or district code representing a geographic area
+Precinct_Id = str       # Precinct Id without the PCT prefix
+Result_Stat_Id = str    # RSTot, RSCst, etc.
+Voting_Group_Id = str   # ED (Election Day) MV (Vote by Mail) TO (Total) count group
+Contest_Id = str        # Primary Id for a contest
+
+###################################
 VERSION='0.0.2'     # Program version
 RESULTS_FORMAT = '0.2'
 
@@ -184,6 +195,26 @@ def strnull(x:str)->str:
     """
     return "" if x == None else x
 
+def dict_append(d:Dict, k, v):
+    """
+    Same as d[k].append(v) but works if k is not in d
+    """
+    d.setdefault(k,[]).append(v)
+
+def dict_extend(d:Dict, k, v):
+    """
+    Same as d[k].extend(v) but works if k is not in d
+    """
+    d.setdefault(k,[]).extend(v)
+
+def dict_add(d:Dict, k, v:int):
+    """
+    Same as d[k]+=v but works if k is not in d
+    """
+    if v==None:
+        return
+    d[k] = d.get(k,0) + v
+
 intQ = Union[int,None]
 
 def intNone(v:str)->intQ:
@@ -217,6 +248,57 @@ if not os.path.exists(OUT_DIR):
 json_dump_args = PP_JSON_DUMP_ARGS if args.pretty else DEFAULT_JSON_DUMP_ARGS
 
 separator = "|" if args.pipe else "\t"
+
+# Save registration by subtotal and precinct
+# RSRegSave['MV']['PCT1101'] has registration for vote by mail in precinct 1101
+RS_Area_Table = Dict[Area_Id,int]
+RS_VG_Table = Dict[Voting_Group_Id,RS_Area_Table]
+
+RSRegSave:RS_VG_Table = dict(TO={},ED={},MV={})
+RSRegSave_MV:RS_Area_Table = RSRegSave['MV']
+RSRegSave_ED:RS_Area_Table= RSRegSave['ED']
+RSRegSave_TO:RS_Area_Table = RSRegSave['TO']
+RSCstSave_MV:RS_Area_Table = {} # VBM returned
+
+RSRegSave_MV['CONG13']=RSRegSave_ED['CONG13']=RSRegSave_TO['CONG13']=0
+
+CrossoverParties = {'DEM','AI','LIB','NPP'}
+# Load turnout by party
+turnoutfile = f'{OUT_DIR}/turnout.tsv'
+partyTurnout = []
+have_turnout = os.path.isfile(turnoutfile)
+if have_turnout:
+    with TSVReader(turnoutfile) as f:
+        # cols area_id|subtotal_type|result_stat|ALL|AI|...
+        # f.header is contains party headings for cols[3:]
+        partyHeaders = f.header[3:]
+        partyTurnout.append('\t'.join(f.header))
+        for cols in f.readlines():
+            area_id, subtotal_type, result_stat = cols[:3]
+            if area_id=='ALL':
+                partyTurnout.append('\t'.join(cols))
+
+            if result_stat=='RSReg':
+                if subtotal_type=='TO':
+                    rs = RSRegSave_TO
+                else:
+                    # Skip ED
+                    continue
+            elif result_stat=='RSIss':
+                rs = RSRegSave_MV
+            elif result_stat=='RSCst':
+                rs = RSCstSave_MV
+            else:
+                continue
+            for i, party in enumerate(partyHeaders):
+                if party=='ALL':
+                    party=''
+                rs[area_id+party]=v=intNone(cols[3+i])
+                if party.endswith('NPP'):
+                    if party != 'NPP':
+                        party = party[:-3]
+                if party in CrossoverParties:
+                    dict_add(rs, area_id+party+'ALL', v)
 
 def putfile(
     filename: str,      # File name to be created
@@ -744,7 +826,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
         total_registration = int(total_registration)
 
         # Enter turnout
-        results_json['turnout'] = {
+        js_turnout = results_json['turnout'] = {
             "_id": "TURNOUT",
             "no_voter_precincts": [],
             "precincts_reporting": int(total_precincts_reporting),
@@ -776,6 +858,8 @@ with ZipFile("resultdata-raw.zip") as rzip:
                 }
             ]
         }
+        if partyTurnout:
+            js_turnout['results_summary'] = partyTurnout
 
         district_name_abbrs = set()
 
@@ -931,6 +1015,13 @@ with ZipFile("resultdata-raw.zip") as rzip:
                             pctcontest[pctids].append(contest_id)
                         else:
                             pctcontest[pctids] = [contest_id]
+
+                        if rcv_rounds>1:
+                            conteststat['rcv_max_votes'] = '\t'.join(
+                                [str(s) for s in rcv_max_cols])
+                            rcv_eliminations.reverse()
+                            conteststat['rcv_eliminations'] = [
+                                s.strip() for s in rcv_eliminations]
 
                         conteststat['results_summary'] = [
                             s.strip() for s in [headerline] +
@@ -1166,6 +1257,25 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         #conteststat['reporting_time'] = report_time_str
                         conteststat['no_voter_precincts'] = nv_pctlist
                         conteststat['rcv_rounds'] = rcv_rounds
+
+                        if rcv_rounds>1:
+                            # Compute
+                            n = rcv_rounds-1
+                            rcv_max_cols = list(final_cols)
+                            rcv_eliminations = []
+                            for line in contest_rcvlines[1:]:
+                                elim = ''
+                                for i,v in enumerate(line.strip('\n').split('\t')):
+                                    if rcv_max_cols[i]== '' and v !='':
+                                        rcv_max_cols[i] = v
+                                        ic = i-cand_start_col
+                                        if ic<0:
+                                            continue
+                                        elim += f"\t{candids[ic]}:{candnames[ic]}"
+                                rcv_eliminations.append(elim)
+                            rcv_max_cols[0]='RCVMAX'
+
+
                         # Split the totallines into a matrix
                         totals = [ line.rstrip().split(separator)
                                   for line in contest_totallines]

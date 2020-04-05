@@ -100,14 +100,6 @@ def getfile(url, filename):
                 with open(filename+".err",'w') as errfile:
                     errfile.write(e.read())
 
-args = parse_args()
-
-separator = "|" if args.pipe else "\t"
-
-os.makedirs("turnoutdata-raw", exist_ok=True)
-
-urlfile = open("turnoutdata-raw/urls.tsv",'w');
-
 # Get the urls in filemap
 filemap = {
     "vbmsummary.csv": VBM_SUMMARY_URL,      # VBM ballots by party for each day
@@ -117,12 +109,7 @@ filemap = {
     "regstat.html":REG_STAT_URL,
     }
 
-for filename, url in filemap.items():
-    url = url_date_re.sub(args.date, url)
-    getfile(url,"turnoutdata-raw/"+filename)
-    urlfile.write(f'{url}\t{filename}\n')
-
-def extract_table(infile):
+def extract_table(infile, separator):
     """
     Load an html file and convert a single table to tsv
     """
@@ -139,25 +126,42 @@ def extract_table(infile):
         with open(outfile,'w') as of:
             of.write(html)
 
+def main():
 
-# Convert html to tsv
-extract_table("turnoutdata-raw/vbmchallenges.html")
-extract_table("turnoutdata-raw/vcturnout.html")
+    args = parse_args()
 
-# parse complex registration stats
-doc = html.parse("turnoutdata-raw/regstat.html")
-tabs = doc.xpath('//div[@class="tab-pane"]|//div[@class="tab-pane active"]')
-line = 0
-with open("turnoutdata-raw/regstat.tsv",'w') as f:
-    for tab in tabs:
-        Id = tab.get('id')
-        rows = tab.cssselect('table tr')
-        #print(f"id={Id} rows={len(rows)}")
-        data = [
-                [td.text_content().strip() for td in row.cssselect('td') ]
-                for row in rows]
-        if not line:
-            print("Area"+separator+separator.join([td[0] for td in data if td]),file=f)
-        print(Id+separator+separator.join([td[1] for td in data if td]),file=f)
-        line += 1
+    separator = "|" if args.pipe else "\t"
 
+    os.makedirs("turnoutdata-raw", exist_ok=True)
+
+    urlfile = open("turnoutdata-raw/urls.tsv",'w');
+
+    for filename, url in filemap.items():
+        url = url_date_re.sub(args.date, url)
+        getfile(url,"turnoutdata-raw/"+filename)
+        urlfile.write(f'{url}\t{filename}\n')
+
+    # Convert html to tsv
+    extract_table("turnoutdata-raw/vbmchallenges.html", separator)
+    extract_table("turnoutdata-raw/vcturnout.html", separator)
+
+    # parse complex registration stats
+    doc = html.parse("turnoutdata-raw/regstat.html")
+    tabs = doc.xpath('//div[@class="tab-pane"]|//div[@class="tab-pane active"]')
+    line = 0
+    with open("turnoutdata-raw/regstat.tsv",'w') as f:
+        for tab in tabs:
+            Id = tab.get('id')
+            rows = tab.cssselect('table tr')
+            #print(f"id={Id} rows={len(rows)}")
+            data = [
+                    [td.text_content().strip() for td in row.cssselect('td') ]
+                    for row in rows]
+            if not line:
+                print("Area"+separator+separator.join([td[0] for td in data if td]),file=f)
+            print(Id+separator+separator.join([td[1] for td in data if td]),file=f)
+            line += 1
+
+
+if __name__ == '__main__':
+    main()

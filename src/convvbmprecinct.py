@@ -62,6 +62,8 @@ def parse_args():
                         help='partisan primary with crossover voting')
     parser.add_argument('-s', dest='regstat', action='store_true',
                         help='use regstat.tsv registration by party summary')
+    parser.add_argument('-t', dest='novbmprecinct', action='store_true',
+                        help='ignore vbmprecinct.csv, use vbmturnout.tsv')
     parser.add_argument('-p', dest='pipe', action='store_true',
                         help='use pipe separator else tab')
 
@@ -115,13 +117,14 @@ partyName2ID['Non-Partisan'] = 'NPP'
 
 if args.crossover:
     partyCodeHeader = "ALL|AI|AINPP|DEM|DEMNPP|GRN|LIB|LIBNPP|PF|REP|NPP"
+    partyCodeHeader2 = partyCodeHeader+'|NPPALL'
     partyCodes = partyCodeHeader.split('|')
     partyCodes2 = partyCodes+['NPPALL']
     partyHeadings = "|American_Independent_|No_Party_Preference_(AI)_|Democratic_|No_Party_Preference_(DEM)_|Green_|Libertarian_|No_Party_Preference_(LIB)_|Peace_&_Freedom_|Republican_|No_Party_Preference_".split('|')
 
 else:
     partyCodes2 = partyCodes = ["ALL"]+list(partyNames.keys())
-    partyCodeHeader = "|".join(partyCodes)
+    partyCodeHeader2 = partyCodeHeader = "|".join(partyCodes)
     partyHeadings = "|American_Independent_|Democratic_|Green_|Libertarian_|Peace_&_Freedom_|Republican_|No_Party_Preference_".split('|')
 
 None_party_cols = [None]*(len(partyCodes2)-1)
@@ -168,6 +171,9 @@ REGISTRATION_header = "PrecinctName|PrecinctExternalId|ElectorGroupName"\
 
 PCTTURNOUT_header = "area_id|total_registration|ed_registration|mv_registration"\
     "|total_ballots|ed_ballots|mv_ballots"
+
+# 2018-era pctturnout.tsv header
+PCTTURNOUT_header2 = "area_id|registration|total_ballots|ed_ballots|mv_ballots"
 
 REGSTAT_header = "Area|Total Registration|Military and Overseas|Permanent Mail Voters"\
     "|American Independent|Democratic|Green|Libertarian|Peace and Freedom"\
@@ -235,11 +241,24 @@ allpctPartyTurnout = defaultdict(None) #BallotGroupTurnout.psv for all pcts
 # Load all party registration and turnout
 have_sov_turnout = os.path.exists("pctturnout.tsv")
 if have_sov_turnout:
-    with TSVReader("pctturnout.tsv",
-              validate_header=PCTTURNOUT_header) as f:
+    with TSVReader("pctturnout.tsv") as f:
+        if f.headerline==PCTTURNOUT_header:
+            format2 = 0
+        elif f.headerline==PCTTURNOUT_header2:
+            format2 = 1
+        else:
+            raise RuntimeError(f"Mismatched header in {f.path}:\n   '{f.headerline}'\n!= '{PCTTURNOUT_header}'")
+
+        # We will insert registration
         groupCodes2 = ['RSRegTO','RSVotTO','RSRegED','RSVotED']+groupCodes
-        for (area_id, total_registration, ed_registration, mv_registration,
-             total_ballots, ed_ballots, mv_ballots) in f.readlines():
+        for cols in f.readlines():
+            if format2:
+                (area_id, total_registration, total_ballots,
+                 ed_ballots, mv_ballots) = cols
+            else:
+                (area_id, total_registration, ed_registration, mv_registration,
+                 total_ballots, ed_ballots, mv_ballots) = cols
+
             precinctReg[area_id] = total_registration
             precinctBallots[area_id] = total_ballots
             precinctEDBallots[area_id] = ed_ballots
@@ -324,7 +343,7 @@ def cleancols(cols:List[int]):
     """
     Convert 0 list values to '' if all 0 except the first column
     """
-    if cols[0] and max(cols[1:])==0:
+    if len(cols)>1 and cols[0] and max(cols[1:])==0:
         cols = [v if v else '' for v in cols]
     return cols
 
@@ -357,16 +376,42 @@ with ZipFile("turnoutdata-raw.zip") as rzip:
         for area_id, total_registration in precinctReg.items():
             precinctPartyReg[f"{area_id}:ALL"] = total_registration
 
-    with TSVReader("vbmprecinct.csv",opener=rzip,binary_decode=True,
-                    validate_header=VBM_header) as f:
-        VBM_turnout = list(f.readdict())
+        with TSVReader("vbmprecinct.csv",opener=rzip,binary_decode=True,
+                        validate_header=VBM_header) as f:
+            VBM_turnout = list(f.readdict())
+
+    if args.novbmprecinct:
+        with TSVReader("vbmsummary.csv",opener=rzip,binary_decode=True,
+                        trim_quotes='"') as f:
+            # The vbmprecinct.tsv is invalid. Substitute vbmsummary
+            VBM_summary = list(f.readdict())
+            r = VBM_summary[-1]
+            # The Totals are not included
+            # The accepted column is missing
+            for p in partyHeadings[1:]:
+                r[p+'Pending'] = 0
+                r[p+'Accepted'] = (int(r[p+'Returned'])
+                                   -int(r[p+'Challenged'])-int(r[p+'Pending']))
+
+            for group in groupHeadings:
+                total = sum([int(r[p+group]) for p in partyHeadings[1:]])
+                r[group] = total
+
+            r['VotingPrecinctID'] = 'ALL'
+
+            VBM_turnout.insert(0,r)
+
 
     with TSVWriter(TURNOUT_FILE,sort=True,sep=separator,
-                   header=f"area_id|subtotal_type|result_stat|{partyCodeHeader}|NPPALL") as o:
+                   header=f"area_id|subtotal_type|result_stat|{partyCodeHeader2}") as o:
         foundpct = set()
         for r in VBM_turnout:
             pct = r['VotingPrecinctID']
-            pcta = 'PCT'+pct
+            if pct=='ALL':
+                pcta = pct
+            else:
+                pcta = 'PCT'+pct
+
             if pcta in foundpct:
                 print(f"Skipping duplicate precinct {pcta}")
                 continue
@@ -384,30 +429,43 @@ with ZipFile("turnoutdata-raw.zip") as rzip:
                 groupcols.append(cols)
 
 
-            # Create computed election-day registration
-            cols_mv = [int(r[ph+'Issued']) for ph in partyHeadings]
-            if args.crossover:
-                appendNPPALL(cols_mv)
-            cols_ed = [
-                None if to == None or mv==None else
-                int(to)-int(mv) if int(to)>=int(mv) else 0
-                for to,mv in zip(cols_to, cols_mv)]
-            o.addline(pcta,'ED','RSReg',*cols_ed)
-            groupcols.append(cols_ed)
+            if not args.novbmprecinct or pcta=='ALL':
+                # Create computed election-day registration
+                cols_mv = [int(r[ph+'Issued']) for ph in partyHeadings]
+                if args.crossover:
+                    appendNPPALL(cols_mv)
+                cols_ed = [
+                    None if to == None or mv==None else
+                    int(to)-int(mv) if int(to)>=int(mv) else 0
+                    for to,mv in zip(cols_to, cols_mv)]
+                o.addline(pcta,'ED','RSReg',*cols_ed)
+                groupcols.append(cols_ed)
 
             if precinctEDBallots:
                 cols = [precinctEDBallots[pcta]]+None_party_cols
                 o.addline(pcta,'ED','RSVot',*cols)
                 groupcols.append(cols)
 
-            for gh,group in zip(groupHeadings,groupCodes):
-                cols = [r[ph+gh] for ph in partyHeadings]
-                if args.crossover:
-                    appendNPPALL(cols)
-                o.addline(pcta,'MV',group,*cols)
+            if not args.novbmprecinct or pcta== 'ALL':
+                for gh,group in zip(groupHeadings,groupCodes):
+                    cols = [r[ph+gh] for ph in partyHeadings]
+                    if args.crossover:
+                        appendNPPALL(cols)
+                    o.addline(pcta,'MV',group,*cols)
+                    groupcols.append(cols)
+            else:
+                # Insert MV
+                cols = [precinctMVBallots[pcta]]+None_party_cols
+                o.addline(pcta,'MV','RSVot',*cols)
                 groupcols.append(cols)
 
-            addGroupCols('ALL')
+            if pcta == 'ALL':
+                groupCodes2 = ['RSRegTO','RSVotTO','RSVotED','RSVot']
+                continue
+
+            if not args.novbmprecinct:
+                addGroupCols('ALL')
+
             sdists = []
             # Create reverse map precinct to summary groups
             for h,c in distHeadMap.items():
