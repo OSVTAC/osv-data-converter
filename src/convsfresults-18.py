@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Copyright (C) 2018  Carl Hage
+# Copyright (C) 2018-2020  Carl Hage
 #
 # This file is part of Open Source Voting Data Converter (ODC).
 #
@@ -22,7 +22,7 @@
 """
 Program to convert results download datasets for SF to ORR data format
 
-Converts 2019 Dominion xlsx SOV format
+Converts 2018 SF SOV format
 """
 
 # Library References
@@ -38,6 +38,7 @@ import operator, functools
 # Local file imports
 from tsvio import TSVReader
 from re2 import re2
+from translations import Translator
 
 # Library imports
 from datetime import datetime
@@ -74,14 +75,21 @@ Voting_Group_Id = str   # ED (Election Day) MV (Vote by Mail) TO (Total) count g
 Contest_Id = str        # Primary Id for a contest
 
 ###################################
-VERSION='0.0.2'     # Program version
-RESULTS_FORMAT = '0.2'
+VERSION='0.0.3'     # Program version
+RESULTS_FORMAT = '0.3'
+
+# These enable deprecated results format
+ADD_RESULTS_VECTOR=False    # True=include results json vector per choice
+ADD_CHOICES=False           # True=include
 
 SF_ENCODING = 'ISO-8859-1'
 SF_SOV_ENCODING ='UTF-8'
 SF_HTML_ENCODING = 'UTF-8'
 
 OUT_DIR = "../out-orr/resultdata"
+TRANSLATIONS_FILE = (os.path.dirname(__file__)+
+                     "/../submodules/osv-translations/translations.json")
+
 
 DEFAULT_JSON_DUMP_ARGS = dict(sort_keys=True, separators=(',\n',':'), ensure_ascii=False)
 PP_JSON_DUMP_ARGS = dict(sort_keys=True, indent=4, ensure_ascii=False)
@@ -244,6 +252,9 @@ elif args.zero:
 
 if not os.path.exists(OUT_DIR):
     os.makedirs(OUT_DIR)
+
+# Load translations
+translator = Translator(TRANSLATIONS_FILE)
 
 json_dump_args = PP_JSON_DUMP_ARGS if args.pretty else DEFAULT_JSON_DUMP_ARGS
 
@@ -516,15 +527,6 @@ total_precinct_ballots = 0
 total_mail_ballots = 0
 total_precincts = 0
 
-# Output file struct
-results_contests = []
-results_json = {
-    '_results_format':RESULTS_FORMAT,
-    "_reporting_time": datetime.now().isoformat(timespec='seconds',sep=' '),
-    "turnout": {},
-    'contests': results_contests
-    }
-
 isrcv = set() # Contest IDs with RCV
 
 no_voter_precincts = set() # IDs for precincts with no registered voters
@@ -573,22 +575,43 @@ with ZipFile("resultdata-raw.zip") as rzip:
 
     # Read turnout details
 
+
+    # Read turnout details
+
     # Read the release ID and title
     results_id = ''
     results_title = ''
     if args.zero:
-        results_json["_results_id"] = results_id = 'zero'
-        results_json["_results_title"] = results_title = {'en':'Zero Report'}
+        results_id = 'zero'
+        results_title = 'Zero Report'
     elif "lastrelease.txt" in zipfilenames:
         with rzip.open("lastrelease.txt") as f:
             last_release_line = f.read().decode('utf-8').strip()
             m = re.match(r'(.*):(.*)', last_release_line)
             if m:
                 results_id, results_title = m.groups()
-                results_json["_results_id"] = results_id
-                results_json["_results_title"] = {'en':results_title}
             else:
                 print(f'Unmatched lastrelease.txt:{last_release_line}')
+
+    # Compute status
+    results_status = ('Preliminary' if re.search(r'(Preliminary|Night)',
+                            results_title,flags=re.I) else
+                        'Final' if re.search(r'(Final)',
+                            results_title,flags=re.I) else
+                        'Zero' if re.search(r'(Zero)',
+                            results_title,flags=re.I) else 'Unknown')
+
+    # Output file struct
+    results_contests = []
+    results_json = {
+        '_results_format':RESULTS_FORMAT,
+        "_reporting_time": datetime.now().isoformat(timespec='seconds',sep=' '),
+        "_results_id": results_id,
+        "_results_status": results_status,
+        "_results_title": translator.get(results_title,context="results_title"),
+        "turnout": {},
+        'contests': results_contests,
+        }
 
     # Get the ID maps in masterlookup.txt
     # Has ID maps only for RCV contests
@@ -752,12 +775,14 @@ with ZipFile("resultdata-raw.zip") as rzip:
 
                 # Prepare the results.json
                 contest_status[contest_id] = conteststat = {
-                    'choices': [],
                     'precincts_reporting': int(processed_done),
                     #'reporting_time': '',
-                    'result_stats': [],
                     'total_precincts': int(total_precincts)
                     }
+                if ADD_CHOICES:
+                    conteststat['choices'] = []
+                if ADD_RESULTS_VECTOR:
+                    conteststat['result_stats'] = []
 
 
             candline = jointsvline(contest_id, candidate_order, candidate_id,
@@ -828,12 +853,14 @@ with ZipFile("resultdata-raw.zip") as rzip:
         # Enter turnout
         js_turnout = results_json['turnout'] = {
             "_id": "TURNOUT",
-            "no_voter_precincts": [],
+            #"no_voter_precincts": [],
             "precincts_reporting": int(total_precincts_reporting),
             "total_precincts": int(total_precincts),
             "eligible_voters": int(eligible_voters),
             #"reporting_time": report_time_str,
-            "result_stats": [
+        }
+        if ADD_RESULTS_VECTOR:
+            js_turnout["result_stats"]= [
                 {
                     "_id": "RSEli",
                     "heading": "Eligible Voters",
@@ -857,7 +884,6 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     "results": [0,0,0]
                 }
             ]
-        }
         if partyTurnout:
             js_turnout['results_summary'] = partyTurnout
 
@@ -1230,7 +1256,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                                                 runoff_status = False
                                                 if nwinners < 2:
                                                     conteststat['to_runoff'] = False
-                                        winning_status[c] = 'R' if has_runoff else 'W'
+                                        winning_status[c] = 'R' if runoff_status else 'W'
                                         nwinners -= 1
                                         last_winner = c
                                         last_v = v
@@ -1255,7 +1281,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         # Append json file output
                         conteststat['_id'] = contest_id
                         #conteststat['reporting_time'] = report_time_str
-                        conteststat['no_voter_precincts'] = nv_pctlist
+                        #conteststat['no_voter_precincts'] = nv_pctlist
                         conteststat['rcv_rounds'] = rcv_rounds
 
                         if rcv_rounds>1:
@@ -1280,14 +1306,15 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         totals = [ line.rstrip().split(separator)
                                   for line in contest_totallines]
                         ntotals = len(totals)
-                        i = 2 # Starting index for result stats
-                        for rsid in resultlist:
-                            conteststat['result_stats'].append({
-                                "_id": rsid,
-                                "heading": VOTING_STATS[rsid],
-                                "results":[int(totals[j][i]) for j in range(ntotals)]
-                                })
-                            i += 1
+                        if ADD_RESULTS_VECTOR:
+                            i = 2 # Starting index for result stats
+                            for rsid in resultlist:
+                                conteststat['result_stats'].append({
+                                    "_id": rsid,
+                                    "heading": VOTING_STATS[rsid],
+                                    "results":[int(totals[j][i]) for j in range(ntotals)]
+                                    })
+                                i += 1
                         k = 0
                         cont_winning_status = defaultdict(str)
                         for candid in candids:
@@ -1295,14 +1322,17 @@ with ZipFile("resultdata-raw.zip") as rzip:
                             if status != ('rcv_eliminated' if rcv_rounds
                                           else 'not_winning'):
                                 cont_winning_status[status]+=f"\t{candid}:{candnames[k]}"
-                            conteststat['choices'].append({
+                            if ADD_CHOICES:
+                                choice_js = {
                                 "_id": candid,
-                                "ballot_title": candnames[k],
-                                "winning_status": status,
+                                "heading": candnames[k],
                                 "success": cand_success.get(candid,''),
-                                "results":[int(totals[j][i]) for j in range(ntotals)]
-                                })
-                            i += 1
+                                }
+                                if ADD_RESULTS_VECTOR:
+                                    choice_js["winning_status"] = status
+                                    choice_js["results"] =[totals[j][i] for j in range(ntotals)]
+                                conteststat['choices'].append(choice_js)
+                                i += 1
                             k += 1
 
                         conteststat['winning_status']= {
