@@ -267,6 +267,16 @@
             }
         },
         {
+            "_id": "RSUpd",
+            "description": "Time of last update (reporting time)",
+            "text": {
+                "en": "Update Time",
+                "es": "",
+                "tl": "",
+                "zh": ""
+            }
+        },
+        {
             "_id": "RSWri",
             "description": "Undetermined write-in votes",
             "text": {
