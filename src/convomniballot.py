@@ -75,6 +75,8 @@ TRANSLATIONS_FILE = (os.path.dirname(__file__)+
 
 OUT_DIR = "../out-orr"
 
+approval_choice_namepat=re.compile(r'.*\b(yes|for)\b.*',flags=re.I)
+
 # Skip title capitalizing upper case for these languages
 dont_uncapitalize_lang = {'zh'}
 lang_other = ['es','tl','zh']
@@ -135,7 +137,7 @@ config_attrs = {
 
 config_default = {
     "bt_digits": 3,
-    "turnout_result_style": "EMTE",
+    "turnout_result_style": "EMT",
     "election_voting_district": "0",
     "cand_extid_prefix": True,
     "election_base_suffix": ""
@@ -814,7 +816,7 @@ def conv_bt_json(j:Dict, bt:str):
                     approval_required = approval_required_by_title.get(
                         title,"Majority")
                     #print(f"approval_required[{title}]={approval_required}")
-                    contj['approval_required'] = approval_required
+                    contj['approval_threshold'] = approval_required
                     approval_required_by_contest[contest_id] = approval_required
                 elif config.runoff:
                     for regex, runoff_date, runoff_type in config.runoff:
@@ -936,6 +938,10 @@ def conv_bt_json(j:Dict, bt:str):
                         "ballot_title": cand_names[0],
                         "sequence": cand_mapped_seq
                         }
+                    if has_question:
+                        print(f"Answer {cand_name} match={approval_choice_namepat.match(cand_name)}")
+                    if has_question and approval_choice_namepat.match(cand_name):
+                        contj['approval_choice_id']=cand_mapped_id
                     if party_istr:
                         candj['ballot_party_label'] = party_istr
                         party_id = partyName2ID[party]
@@ -1347,6 +1353,13 @@ else:
     reporting_groups_by_distid = {}
     print("Run extresultdist.py to extract reporting groups")
 
+if os.path.isfile("../ems/distcounty.tsv"):
+    with TSVReader("../ems/distcounty.tsv") as r:
+        district_county_list = r.load_simple_dict(0,1)
+    #print("district_county_list=",district_county_list)
+else:
+    district_county_list = {}
+
 with TSVReader("../ems/distclass.tsv") as r:
     if r.headerline != "District_Code|Classification|District_Name|District_Short_Name":
         raiseFormatError(f"Unmatched distnames.tsv header {r.headerline}")
@@ -1354,14 +1367,16 @@ with TSVReader("../ems/distclass.tsv") as r:
         (District_Code, Classification, District_Name, District_Short_Name) = cols
 
         # TODO: Compute classification
-        arealist.append({
+        d = {
             "_id": District_Code,
             "name": District_Name,
             "short_name": District_Short_Name,
             "classification": Classification,
             "reporting_group_ids": reporting_groups_by_distid.get(District_Code,"")
-        })
-
+        }
+        if District_Code in district_county_list:
+            d["county_list"] = district_county_list[District_Code].split('; ')
+        arealist.append(d)
 
 
 

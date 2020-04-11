@@ -121,13 +121,16 @@ if args.crossover:
     partyCodes = partyCodeHeader.split('|')
     partyCodes2 = partyCodes+['NPPALL']
     partyHeadings = "|American_Independent_|No_Party_Preference_(AI)_|Democratic_|No_Party_Preference_(DEM)_|Green_|Libertarian_|No_Party_Preference_(LIB)_|Peace_&_Freedom_|Republican_|No_Party_Preference_".split('|')
+    crossoverPartySuff = "AINPP|DEMNPP|LIBNPP|NPPALL".split("|")
 
 else:
     partyCodes2 = partyCodes = ["ALL"]+list(partyNames.keys())
     partyCodeHeader2 = partyCodeHeader = "|".join(partyCodes)
     partyHeadings = "|American_Independent_|Democratic_|Green_|Libertarian_|Peace_&_Freedom_|Republican_|No_Party_Preference_".split('|')
+    crossoverPartySuff = []
 
 None_party_cols = [None]*(len(partyCodes2)-1)
+
 
 # Add NPPALL as computed total of AINPP+DEMNPP+LIBNPP+NPP
 nppall_i = len(partyCodes)
@@ -136,10 +139,11 @@ npp_cols = [i for i,n in enumerate(partyCodes) if n.endswith('NPP')]
 #print(f"npp_cols={npp_cols}")
 
 
-groupCodes = "RSIss|RSCst|RSCnt|RSPnd|RSCha".split('|')
+groupCodes = "RSReg|RSCst|RSCnt|RSPnd|RSCha".split('|')
 groupHeadings = "Issued|Returned|Accepted|Pending|Challenged".split('|')
-# These are the group codes to summarize in stats
-groupCodes2 = ['RSRegTO','RSRegED']+groupCodes
+
+RSheaderCards = "RSReg|RSCst|RSCnt|RSCd1|RSCd2|RSPnd|RSCha"
+RSheader = "RSReg|RSCst|RSCnt|RSPnd|RSCha"
 
 VBM_header = "VotingPrecinctID|VotingPrecinctName|MailBallotPrecinct|BalType"\
     "|Assembly|Congressional|Senatorial|Supervisorial|Issued"\
@@ -196,17 +200,36 @@ def get_zip_filenames(
 
     return zipfilenames
 
-def addGroupCols(area:str):
+def total(k,v):
     """
-    For a set of stats with area, add the stat values to summary districts in
-    sdisttotal[area][stat][party]
+    Sets turnout and have_total for the key and value
     """
-    if area not in sdisttotal:
-        sdisttotal[area]=[[0]*len(partyCodes2) for i in range(len(groupCodes2))]
-    for i,grouptotals in enumerate(sdisttotal[area]):
-        for j,v in enumerate(groupcols[i]):
-            if v!=None:
-                grouptotals[j] += int(v)
+    turnout[k] = have_total[k] = v
+
+def add_total(k, v):
+    if k not in have_total:
+        turnout[k] += v
+
+def set_total(k, v):
+    if k not in turnout:
+        turnout[k] = have_total[k] = v
+
+def set_precinct_sum(area:str, pc, vg_rs, v, sdists, skipAll=False):
+    """
+    Set the precinct-level turnout and sum for summary districts
+    """
+    # Set the base value
+    set_total(f"{area}:{pc}:{vg_rs}", v)
+
+    sumpctall = pc.endswith('NPP') and args.crossover
+    if sumpctall:
+        add_total(f"{area}:NPPALL:{vg_rs}", v)
+
+    for area in sdists:
+        add_total(f"{area}:{pc}:{vg_rs}", v)
+        if sumpctall:
+            add_total(f"{area}:NPPALL:{vg_rs}", v)
+
 def nocomma(s:str):
     """
     convert to int with commas removed
@@ -216,27 +239,33 @@ def nocomma(s:str):
     return s
 
 def sortkey(k):
-    k = k[0]
     order=ordermap.get(k[0:4],' ')
     return order+k[4:] if len(k)>5 else order+'0'+k[4:]
+
+def dsortkey(k):
+    return sortkey(k[0])
 
 Counting_Group2Id = {
     '*TOTALS*':'TO',
     'Election Day':'ED',
     'Vote by Mail':'MV',
     }
+
+voting_groups = Counting_Group2Id.values()
+
 Card_Index2Id = {
-    '*TOTALS*':'RSVot',
+    '*TOTALS*':'RSCnt',
     '1':'RSCd1',
     '2':'RSCd2',
     }
 
-precinctReg = {}        # Precinct Registration from sov extract
-precinctBallots = {}    # Ballots returned from sov extract
-precinctEDBallots = {}  # ED Ballots cast from sov extract
-precinctMVBallots = {}  # ED Ballots cast from sov extract
-precinctPartyReg = {}   # Registration by PCTprecint:PartyId from Registration.txt
-allpctPartyTurnout = defaultdict(None) #BallotGroupTurnout.psv for all pcts
+# turnout['area:party:group:stat']={"RSReg|RSCst|RSCnt|RSPnd|RSCha"}
+turnout = defaultdict(int)
+have_total = {} #Marker for set totals
+
+
+allpcts = set()
+allpcts.add('ALL')
 
 # Load all party registration and turnout
 have_sov_turnout = os.path.exists("pctturnout.tsv")
@@ -249,8 +278,6 @@ if have_sov_turnout:
         else:
             raise RuntimeError(f"Mismatched header in {f.path}:\n   '{f.headerline}'\n!= '{PCTTURNOUT_header}'")
 
-        # We will insert registration
-        groupCodes2 = ['RSRegTO','RSVotTO','RSRegED','RSVotED']+groupCodes
         for cols in f.readlines():
             if format2:
                 (area_id, total_registration, total_ballots,
@@ -259,10 +286,14 @@ if have_sov_turnout:
                 (area_id, total_registration, ed_registration, mv_registration,
                  total_ballots, ed_ballots, mv_ballots) = cols
 
-            precinctReg[area_id] = total_registration
-            precinctBallots[area_id] = total_ballots
-            precinctEDBallots[area_id] = ed_ballots
-            precinctMVBallots[area_id] = mv_ballots
+            if args.novbmprecinct:
+                allpcts.add(area_id)
+            total(f'{area_id}:ALL:TO:RSReg', nocomma(total_registration))
+            total(f'{area_id}:ALL:TO:RSCst', nocomma(total_ballots))
+            total(f'{area_id}:ALL:ED:RSCst', nocomma(ed_ballots))
+            total(f'{area_id}:ALL:MV:RSCnt', nocomma(mv_ballots))
+            for vg in ['TO','ED']:
+                total(f'{area_id}:ALL:{vg}:RSCnt', turnout[f'{area_id}:ALL:{vg}:RSCst'])
 
 with ZipFile("resultdata-raw.zip") as rzip:
     zipfilenames = get_zip_filenames(rzip)
@@ -274,11 +305,16 @@ with ZipFile("resultdata-raw.zip") as rzip:
             for (PrecinctName, PrecinctExternalId, ElectorGroupName,
                 ElectorGroupExternalId, Count) in f.readlines():
                 party_id = partyName2ID[ElectorGroupName]
-                precinctPartyReg[f"PCT{PrecinctExternalId}:{party_id}"] = nocomma(Count)
+                allpcts.add("PCT"+PrecinctExternalId)
+                total(f"PCT{PrecinctExternalId}:{party_id}:TO:RSReg", nocomma(Count))
 
     have_BallotGroupTurnout = "BallotGroupTurnout.psv" in zipfilenames
     if have_BallotGroupTurnout:
-        allpctPartyTurnout = defaultdict(int) # Use int default
+        RSheader = RSheaderCards
+        # We will overwrite the prior ALL totals summed here
+        for vg in voting_groups:
+            turnout[f'ALL:ALL:{vg}:RSCnt'] = 0
+
         with TSVReader("BallotGroupTurnout.psv",opener=rzip,binary_decode=True,
                     validate_header="Ballot Group|Counting Group|Card Index|Turnout"
                     ) as f:
@@ -294,28 +330,18 @@ with ZipFile("resultdata-raw.zip") as rzip:
                     party_id += 'NPP'
                 voting_group = Counting_Group2Id[Counting_Group]
                 card_id = Card_Index2Id[Card_Index]
-                allpctPartyTurnout[f'{voting_group}:{card_id}:{party_id}'] +=int(Turnout)
+                k = f'ALL:{party_id}:{voting_group}:{card_id}'
+                total(k, turnout[k] + int(Turnout))
+
 
             # Fix missing card totals
             for rs in ['RSCd1','RSCd2']:
                 for p in partyCodes:
-                    allpctPartyTurnout[f'TO:{rs}:{p}']= (
-                        allpctPartyTurnout[f'ED:{rs}:{p}']+
-                        allpctPartyTurnout[f'MV:{rs}:{p}'])
-    else:
-        # We don't have per-card turnout
-        Card_Index2Id = { '*TOTALS*':'RSVot'}
-        Counting_Group2Id = {'Vote by Mail':'MV'}
-        if have_sov_turnout:
-            allpctPartyTurnout['TO:RSVot:ALL'] = precinctBallots['ALL']
-            allpctPartyTurnout['ED:RSVot:ALL'] = precinctEDBallots['ALL']
-            allpctPartyTurnout['MV:RSVot:ALL'] = precinctMVBallots['ALL']
-            for p in partyCodes[1:]:
-                allpctPartyTurnout[f'TO:RSVot:{p}'] = None
-                allpctPartyTurnout[f'ED:RSVot:{p}'] = None
-                allpctPartyTurnout[f'MV:RSVot:{p}'] = None
+                    turnout[f'ALL:{p}:TO:{rs}']= (
+                        turnout[f'ALL:{p}:ED:{rs}']+
+                        turnout[f'ALL:{p}:MV:{rs}'])
 
-
+RSCodes = RSheader.split('|')
 
 def NPPCrossover(party_id:str)->str:
     """
@@ -365,20 +391,19 @@ with ZipFile("turnoutdata-raw.zip") as rzip:
                 area_id = r['Area']
                 if area_id == 'district_all':
                     area_id = 'ALL'
-                precinctPartyReg[f"{area_id}:ALL"] = nocomma(r['Total Registration'])
+                to_key = f"{area_id}:ALL:TO:RSReg"
+                if to_key not in turnout:
+                    turnout[to_key] = nocomma(r['Total Registration'])
                 for p,pname in partyNames.items():
                     if pname=='No Party Preference':
                         pname='No Party Preference/Unknown'
-                    precinctPartyReg[f"{area_id}:{p}"] = nocomma(r[pname])
+                    to_key = f"{area_id}:{p}:TO:RSReg"
+                    if to_key not in turnout:
+                        turnout[f"{area_id}:{p}TO:RSReg"] = nocomma(r[pname])
 
-    if have_sov_turnout:
-        # Override all party registration from SOV
-        for area_id, total_registration in precinctReg.items():
-            precinctPartyReg[f"{area_id}:ALL"] = total_registration
-
-        with TSVReader("vbmprecinct.csv",opener=rzip,binary_decode=True,
-                        validate_header=VBM_header) as f:
-            VBM_turnout = list(f.readdict())
+    with TSVReader("vbmprecinct.csv",opener=rzip,binary_decode=True,
+                    validate_header=VBM_header) as f:
+        VBM_turnout = list(f.readdict())
 
     if args.novbmprecinct:
         with TSVReader("vbmsummary.csv",opener=rzip,binary_decode=True,
@@ -402,8 +427,8 @@ with ZipFile("turnoutdata-raw.zip") as rzip:
             VBM_turnout.insert(0,r)
 
 
-    with TSVWriter(TURNOUT_FILE,sort=True,sep=separator,
-                   header=f"area_id|subtotal_type|result_stat|{partyCodeHeader2}") as o:
+    with TSVWriter(TURNOUT_FILE,sort=False,sep=separator,
+                   header=f"area_id|subtotal_type|party|"+RSheader) as o:
         foundpct = set()
         for r in VBM_turnout:
             pct = r['VotingPrecinctID']
@@ -411,138 +436,98 @@ with ZipFile("turnoutdata-raw.zip") as rzip:
                 pcta = pct
             else:
                 pcta = 'PCT'+pct
+                if pcta in foundpct:
+                    print(f"Skipping duplicate precinct {pcta}")
+                    continue
+                foundpct.add(pcta)
+                allpcts.add(pcta)
 
-            if pcta in foundpct:
-                print(f"Skipping duplicate precinct {pcta}")
-                continue
-            foundpct.add(pcta)
-            groupcols = []
+            sdists = []
+            if pcta!='ALL':
+                # Create reverse map precinct to summary groups
+                for h,c in distHeadMap.items():
+                    area = precinctNeigh[pct] if c=='NEIG' else c+r[h]
+                    if area=='CONG13':
+                        continue
+                    if area not in sdistpct:
+                        sdistpct[area] = []
 
-            # Create a pseudo-group for party registration
-            cols_to = [getPrecinctPartyReg(pcta, ph) for ph in partyCodes2]
-            o.addline(pcta,'TO','RSReg',*cols_to)
-            groupcols.append(cols_to)
+                    sdistpct[area].append(pct)
+                    sdists.append(area)
 
-            if precinctBallots:
-                cols = [precinctBallots[pcta]]+None_party_cols
-                o.addline(pcta,'TO','RSVot',*cols)
-                groupcols.append(cols)
+                # Form a space separated list
+                sdist_group = ' '.join(sorted(sdists, key=sortkey))
+                if sdist_group not in pctsdist:
+                    pctsdist[sdist_group] = []
+                pctsdist[sdist_group].append(pct)
+                sdists.append('ALL')
 
 
             if not args.novbmprecinct or pcta=='ALL':
                 # Create computed election-day registration
-                cols_mv = [int(r[ph+'Issued']) for ph in partyHeadings]
-                if args.crossover:
-                    appendNPPALL(cols_mv)
-                cols_ed = [
-                    None if to == None or mv==None else
-                    int(to)-int(mv) if int(to)>=int(mv) else 0
-                    for to,mv in zip(cols_to, cols_mv)]
-                o.addline(pcta,'ED','RSReg',*cols_ed)
-                groupcols.append(cols_ed)
-
-            if precinctEDBallots:
-                cols = [precinctEDBallots[pcta]]+None_party_cols
-                o.addline(pcta,'ED','RSVot',*cols)
-                groupcols.append(cols)
-
-            if not args.novbmprecinct or pcta== 'ALL':
-                for gh,group in zip(groupHeadings,groupCodes):
-                    cols = [r[ph+gh] for ph in partyHeadings]
-                    if args.crossover:
-                        appendNPPALL(cols)
-                    o.addline(pcta,'MV',group,*cols)
-                    groupcols.append(cols)
-            else:
-                # Insert MV
-                cols = [precinctMVBallots[pcta]]+None_party_cols
-                o.addline(pcta,'MV','RSVot',*cols)
-                groupcols.append(cols)
-
-            if pcta == 'ALL':
-                groupCodes2 = ['RSRegTO','RSVotTO','RSVotED','RSVot']
-                continue
-
-            if not args.novbmprecinct:
-                addGroupCols('ALL')
-
-            sdists = []
-            # Create reverse map precinct to summary groups
-            for h,c in distHeadMap.items():
-                area = precinctNeigh[pct] if c=='NEIG' else c+r[h]
-                if area=='CONG13':
-                    continue
-                if area not in sdistpct:
-                    sdistpct[area] = []
-
-                sdistpct[area].append(pct)
-                sdists.append(area)
-
-                addGroupCols(area)
-
-            # Form a space separated list
-            sdist_group = ' '.join(sorted(sdists, key=sortkey))
-            if sdist_group not in pctsdist:
-                pctsdist[sdist_group] = []
-            pctsdist[sdist_group].append(pct)
-
-
-        # Output district summaries
-        for area,rows in sorted(sdisttotal.items(), key=sortkey):
-            skip = 0
-            if have_regstat and f"{area}:DEM" in precinctPartyReg:
-               # Reset the computed summary area TO/ED registration
-               i_RSRegTO = groupCodes2.index('RSRegTO')
-               i_RSRegED = groupCodes2.index('RSRegED')
-               i_RSRegMV = groupCodes2.index('RSIss')
-               for i,p in enumerate(partyCodes2):
-                   sdisttotal[area][i_RSRegTO][i] = t = nocomma(precinctPartyReg[f"{area}:{p}"])
-                   m = nocomma(sdisttotal[area][i_RSRegMV][i])
-                   if m and t and t>m:
-                       sdisttotal[area][i_RSRegED][i] = t-m
-            for i,group in enumerate(groupCodes2):
-                m=re.match(r'(RS.*)(TO|ED)$',group)
-                if m:
-                    group, vg = m.groups()
-                else:
-                    vg = 'MV'
-                line = o.joinline(area,vg,group,*cleancols(sdisttotal[area][i]))
-                if area=='CONG13':
-                    continue
-                if area=='ALL':
-                    if group=='RSVot' and have_BallotGroupTurnout:
-                        skip += 1
+                for pc, ph in zip(partyCodes, partyHeadings):
+                    mv_reg = int(r[ph+'Issued'])
+                    to_key = f"{pcta}:{pc}:TO:RSReg"
+                    if to_key not in turnout:
                         continue
-                    o.lines.insert(i-skip,line)
-                else:
-                    o.lines.append(line)
+                    to_reg = turnout[to_key]
+                    ed_reg = to_reg - mv_reg
+                    if ed_reg<0:
+                        ed_reg = 0
+                    set_precinct_sum(pcta, pc, "TO:RSReg", to_reg, sdists)
+                    set_precinct_sum(pcta, pc, "ED:RSReg", ed_reg, sdists)
 
-        # Insert turnout for ALL
-        def getAllpctPartyTurnout(k):
-            return allpctPartyTurnout[k] if k in allpctPartyTurnout else ''
+            for pc, ph in zip(partyCodes, partyHeadings):
+                for gh,gc in zip(groupHeadings,groupCodes):
+                    v = int(r[ph+gh]);
+                    if gc=='RSCst' and pc=='ALL':
+                        # Reset the total ballots case
+                        k = f'{pcta}:ALL'
+                        if k+":ED:RSCst" in turnout:
+                            turnout[k+":TO:RSCst"] = turnout[k+":ED:RSCst"] + v
+                    set_precinct_sum(pcta, pc, "MV:"+gc, v, sdists)
 
-        if have_BallotGroupTurnout:
-            for i, vg in reversed(list(enumerate(Counting_Group2Id.values()))):
-                for rs in reversed(list(Card_Index2Id.values())):
-                    cols = [getAllpctPartyTurnout(f'{vg}:{rs}:{party_id}')
-                            for party_id in partyCodes]
-                    #if rs.startswith('RSCd'):
-                        #cols.append('')
-                    #else:
-                        #appendNPPALL(cols)
-                    if args.crossover:
-                        appendNPPALL(cols)
-                    o.lines.insert(i+1,o.joinline('ALL',vg,rs,*cols))
+        # Compute the TO/ED RSCst, RSPnd, RSCha from MV totals
+        pclist = partyCodes if have_BallotGroupTurnout else ['ALL']
+        for pc in pclist:
+            # The ED:RSCst is the same as ED:RSCnt
+            #import pdb; pdb.set_trace()
+            set_total(f'ALL:{pc}:ED:RSCst', turnout[f'ALL:{pc}:ED:RSCnt'])
+            # Compute the TO:CST
+            total(f'ALL:{pc}:TO:RSCst', turnout[f'ALL:{pc}:ED:RSCst'] +
+                                        turnout[f'ALL:{pc}:MV:RSCst'])
+            # Copy the RSPnd/RSCha
+            for rs in ['RSPnd','RSCha']:
+                set_total(f'ALL:{pc}:TO:{rs}', turnout[f'ALL:{pc}:MV:{rs}'])
 
-        o.sort = False
+        if args.crossover:
+            # Compute NPPALL
+            for rs in "RSCst RSCnt RSCd1 RSCd2 RSPnd RSCha".split():
+                for vg in ['TO','ED']:
+                    if f'ALL:DEMNPP:{vg}:{rs}' not in turnout:
+                        continue
+                    set_total(f'ALL:NPPALL:{vg}:{rs}',sum(
+                        [ turnout[f'ALL:{pc}:{vg}:{rs}'] for pc in
+                          partyCodes if pc.endswith('NPP')]))
+
+        # Output all+precinct lines
+        sdists = sorted(sdistpct.keys(), key=sortkey)
+        for area in sorted(allpcts)+sdists:
+            for vg in voting_groups:
+                for ph in partyCodes2:
+                    pref = f"{area}:{ph}:{vg}:"
+                    #print(f'turnout[{pref+"RSReg"}]={turnout.get(pref+"RSReg",None)}')
+                    if pref+"RSReg" in turnout or pref+"RSCst" in turnout:
+                        cols = [turnout.get(pref+rs,"") for rs in RSCodes]
+                        o.addline(area,vg,ph,*cols)
 
     with TSVWriter('sdistpct.tsv',sort=False,sep=separator,
                    header="area_id|precinct_ids") as o:
-        for area,pcts in sorted(sdistpct.items(), key=sortkey):
+        for area,pcts in sorted(sdistpct.items(), key=dsortkey):
             o.addline(area,' '.join(pcts))
     with TSVWriter('pctsdist.tsv',sort=False,sep=separator,
                    header="precinct_ids|area_ids") as o:
-        for area,pcts in sorted(pctsdist.items(), key=sortkey):
+        for area,pcts in sorted(pctsdist.items(), key=dsortkey):
             o.addline(' '.join(pcts),area)
 
 

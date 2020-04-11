@@ -890,36 +890,27 @@ partyTurnout = []
 have_turnout = os.path.isfile(turnoutfile)
 if have_turnout:
     with TSVReader(turnoutfile) as f:
-        # cols area_id|subtotal_type|result_stat|ALL|AI|...
-        # f.header is contains party headings for cols[3:]
+        # cols area_id|subtotal_type|party|RSReg|RSCst|...
         partyHeaders = f.header[3:]
         partyTurnout.append('\t'.join(f.header))
         for cols in f.readlines():
-            area_id, subtotal_type, result_stat = cols[:3]
+            area_id, subtotal_type, party, RSReg, RSCst = cols[:5]
             if area_id=='ALL':
                 partyTurnout.append('\t'.join(cols))
+            if party=='ALL':
+                party=''
 
-            if result_stat=='RSReg':
-                if subtotal_type=='TO':
-                    rs = RSRegSave_TO
-                else:
-                    # Skip ED
-                    continue
-            elif result_stat=='RSIss':
-                rs = RSRegSave_MV
-            elif result_stat=='RSCst':
-                rs = RSCstSave_MV
-            else:
+            if RSReg=='':
                 continue
-            for i, party in enumerate(partyHeaders):
-                if party=='ALL':
-                    party=''
-                rs[area_id+party]=v=intNone(cols[3+i])
-                if party.endswith('NPP'):
-                    if party != 'NPP':
-                        party = party[:-3]
-                if party in CrossoverParties:
-                    dict_add(rs, area_id+party+'ALL', v)
+
+            if subtotal_type=='TO':
+                RSRegSave_TO[area_id+party] = int(RSReg)
+            elif subtotal_type=='MV':
+                RSRegSave_MV[area_id+party] = int(RSReg)
+                RSCstSave_MV[area_id+party] = int(RSCst)
+            else:
+                # Skip ED
+                continue
 
 
 # Now RSRegSave_MV and RSRegSave_TO have VBM and total registration
@@ -1824,7 +1815,8 @@ with ZipFile("resultdata-raw.zip") as rzip:
 
                         #Unused: conteststat['reporting_time'] = report_time_str
 #                        conteststat['no_voter_precincts'] = nv_pctlist
-                        conteststat['rcv_rounds'] = rcv_rounds
+                        if hasrcv:
+                            conteststat['rcv_rounds'] = rcv_rounds
 
                         if rcv_rounds>1:
                             # Compute
@@ -1861,11 +1853,11 @@ with ZipFile("resultdata-raw.zip") as rzip:
                                     votes_required = 0
                                 if votes_required:
                                     if int(candvotes[0]) >= votes_required:
-                                        conteststat['success'] = True
+                                        conteststat['approval_met'] = True
                                         win_id = candids[0]
                                         lose_id = candids[1]
                                     else:
-                                        conteststat['success'] = False
+                                        conteststat['approval_met'] = False
                                         win_id = candids[1]
                                         lose_id = candids[0]
                                     winning_status[win_id] = 'W'
@@ -1947,7 +1939,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         cont_winning_status = defaultdict(str)
                         for candid in candids:
                             status = winning_status_names[winning_status.get(candid,'')]
-                            if (status != 'rcv_eliminated' and
+                            if (status != 'rcv_eliminated' and status!='' and
                                 status != 'not_winning'):
                                 cont_winning_status[status]+=f"\t{candid}:{candnames[k]}"
 
