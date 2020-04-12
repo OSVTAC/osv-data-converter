@@ -423,6 +423,13 @@
             "voting_group_ids": "TO ED MV"
         },
         {
+            "_id": "EMTX2",
+            "description": "2 Card extended Turnout, subtotal by Election Day/VBM",
+            "is_rcv": false,
+            "result_stat_type_ids": "RSReg RSCst RSCnt RSCd1 RSCd2 RSPnd RSCha",
+            "voting_group_ids": "TO ED MV"
+        },
+        {
             "_id": "EMT",
             "description": "Turnout, subtotal by Election Day/VBM",
             "is_rcv": false,
