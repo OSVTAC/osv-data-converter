@@ -280,36 +280,27 @@ partyTurnout = []
 have_turnout = os.path.isfile(turnoutfile)
 if have_turnout:
     with TSVReader(turnoutfile) as f:
-        # cols area_id|subtotal_type|result_stat|ALL|AI|...
-        # f.header is contains party headings for cols[3:]
+        # cols area_id|subtotal_type|party|RSReg|RSCst|...
         partyHeaders = f.header[3:]
         partyTurnout.append('\t'.join(f.header))
         for cols in f.readlines():
-            area_id, subtotal_type, result_stat = cols[:3]
+            area_id, subtotal_type, party, RSReg, RSCst = cols[:5]
             if area_id=='ALL':
                 partyTurnout.append('\t'.join(cols))
+            if party=='ALL':
+                party=''
 
-            if result_stat=='RSReg':
-                if subtotal_type=='TO':
-                    rs = RSRegSave_TO
-                else:
-                    # Skip ED
-                    continue
-            elif result_stat=='RSIss':
-                rs = RSRegSave_MV
-            elif result_stat=='RSCst':
-                rs = RSCstSave_MV
-            else:
+            if RSReg=='':
                 continue
-            for i, party in enumerate(partyHeaders):
-                if party=='ALL':
-                    party=''
-                rs[area_id+party]=v=intNone(cols[3+i])
-                if party.endswith('NPP'):
-                    if party != 'NPP':
-                        party = party[:-3]
-                if party in CrossoverParties:
-                    dict_add(rs, area_id+party+'ALL', v)
+
+            if subtotal_type=='TO':
+                RSRegSave_TO[area_id+party] = int(RSReg)
+            elif subtotal_type=='MV':
+                RSRegSave_MV[area_id+party] = int(RSReg)
+                RSCstSave_MV[area_id+party] = int(RSCst)
+            else:
+                # Skip ED
+                continue
 
 def putfile(
     filename: str,      # File name to be created

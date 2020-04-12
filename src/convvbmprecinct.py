@@ -200,7 +200,7 @@ def get_zip_filenames(
 
     return zipfilenames
 
-def total(k,v):
+def set_total(k,v):
     """
     Sets turnout and have_total for the key and value
     """
@@ -210,7 +210,7 @@ def add_total(k, v):
     if k not in have_total:
         turnout[k] += v
 
-def set_total(k, v):
+def set_total_default(k, v):
     if k not in turnout:
         turnout[k] = have_total[k] = v
 
@@ -219,7 +219,7 @@ def set_precinct_sum(area:str, pc, vg_rs, v, sdists, skipAll=False):
     Set the precinct-level turnout and sum for summary districts
     """
     # Set the base value
-    set_total(f"{area}:{pc}:{vg_rs}", v)
+    set_total_default(f"{area}:{pc}:{vg_rs}", v)
 
     sumpctall = pc.endswith('NPP') and args.crossover
     if sumpctall:
@@ -286,14 +286,15 @@ if have_sov_turnout:
                 (area_id, total_registration, ed_registration, mv_registration,
                  total_ballots, ed_ballots, mv_ballots) = cols
 
+            set_total(f'{area_id}:ALL:TO:RSReg', nocomma(total_registration))
+            set_total(f'{area_id}:ALL:TO:RSCnt', nocomma(total_ballots))
+            set_total(f'{area_id}:ALL:ED:RSCnt', nocomma(ed_ballots))
+            set_total(f'{area_id}:ALL:MV:RSCnt', nocomma(mv_ballots))
             if args.novbmprecinct:
                 allpcts.add(area_id)
-            total(f'{area_id}:ALL:TO:RSReg', nocomma(total_registration))
-            total(f'{area_id}:ALL:TO:RSCst', nocomma(total_ballots))
-            total(f'{area_id}:ALL:ED:RSCst', nocomma(ed_ballots))
-            total(f'{area_id}:ALL:MV:RSCnt', nocomma(mv_ballots))
-            for vg in ['TO','ED']:
-                total(f'{area_id}:ALL:{vg}:RSCnt', turnout[f'{area_id}:ALL:{vg}:RSCst'])
+            else:
+                for vg in ['TO','ED']:
+                    set_total(f'{area_id}:ALL:{vg}:RSCst', turnout[f'{area_id}:ALL:{vg}:RSCnt'])
 
 with ZipFile("resultdata-raw.zip") as rzip:
     zipfilenames = get_zip_filenames(rzip)
@@ -306,7 +307,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                 ElectorGroupExternalId, Count) in f.readlines():
                 party_id = partyName2ID[ElectorGroupName]
                 allpcts.add("PCT"+PrecinctExternalId)
-                total(f"PCT{PrecinctExternalId}:{party_id}:TO:RSReg", nocomma(Count))
+                set_total(f"PCT{PrecinctExternalId}:{party_id}:TO:RSReg", nocomma(Count))
 
     have_BallotGroupTurnout = "BallotGroupTurnout.psv" in zipfilenames
     if have_BallotGroupTurnout:
@@ -331,7 +332,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                 voting_group = Counting_Group2Id[Counting_Group]
                 card_id = Card_Index2Id[Card_Index]
                 k = f'ALL:{party_id}:{voting_group}:{card_id}'
-                total(k, turnout[k] + int(Turnout))
+                set_total(k, turnout[k] + int(Turnout))
 
 
             # Fix missing card totals
@@ -477,28 +478,36 @@ with ZipFile("turnoutdata-raw.zip") as rzip:
                     set_precinct_sum(pcta, pc, "TO:RSReg", to_reg, sdists)
                     set_precinct_sum(pcta, pc, "ED:RSReg", ed_reg, sdists)
 
-            for pc, ph in zip(partyCodes, partyHeadings):
-                for gh,gc in zip(groupHeadings,groupCodes):
-                    v = int(r[ph+gh]);
-                    if gc=='RSCst' and pc=='ALL':
-                        # Reset the total ballots case
-                        k = f'{pcta}:ALL'
-                        if k+":ED:RSCst" in turnout:
-                            turnout[k+":TO:RSCst"] = turnout[k+":ED:RSCst"] + v
-                    set_precinct_sum(pcta, pc, "MV:"+gc, v, sdists)
+                for pc, ph in zip(partyCodes, partyHeadings):
+                    for gh,gc in zip(groupHeadings,groupCodes):
+                        v = int(r[ph+gh]);
+                        if gc=='RSCst' and pc=='ALL':
+                            # Reset the total ballots case
+                            k = f'{pcta}:ALL'
+                            if k+":ED:RSCst" in turnout:
+                                turnout[k+":TO:RSCst"] = turnout[k+":ED:RSCst"] + v
+                        set_precinct_sum(pcta, pc, "MV:"+gc, v, sdists)
 
         # Compute the TO/ED RSCst, RSPnd, RSCha from MV totals
         pclist = partyCodes if have_BallotGroupTurnout else ['ALL']
         for pc in pclist:
             # The ED:RSCst is the same as ED:RSCnt
             #import pdb; pdb.set_trace()
-            set_total(f'ALL:{pc}:ED:RSCst', turnout[f'ALL:{pc}:ED:RSCnt'])
+            v = turnout.get(f'ALL:{pc}:ED:RSCnt', None)
+            if v==None:
+                continue
+            set_total_default(f'ALL:{pc}:ED:RSCst', v)
             # Compute the TO:CST
-            total(f'ALL:{pc}:TO:RSCst', turnout[f'ALL:{pc}:ED:RSCst'] +
-                                        turnout[f'ALL:{pc}:MV:RSCst'])
+            v2 = turnout.get(f'ALL:{pc}:MV:RSCst', None)
+            if v2==None:
+                continue
+            set_total(f'ALL:{pc}:TO:RSCst', v + v2)
             # Copy the RSPnd/RSCha
             for rs in ['RSPnd','RSCha']:
-                set_total(f'ALL:{pc}:TO:{rs}', turnout[f'ALL:{pc}:MV:{rs}'])
+                v = turnout.get(f'ALL:{pc}:MV:{rs}', None)
+                if v==None:
+                    continue
+                set_total_default(f'ALL:{pc}:TO:{rs}', v)
 
         if args.crossover:
             # Compute NPPALL
@@ -506,7 +515,7 @@ with ZipFile("turnoutdata-raw.zip") as rzip:
                 for vg in ['TO','ED']:
                     if f'ALL:DEMNPP:{vg}:{rs}' not in turnout:
                         continue
-                    set_total(f'ALL:NPPALL:{vg}:{rs}',sum(
+                    set_total_default(f'ALL:NPPALL:{vg}:{rs}',sum(
                         [ turnout[f'ALL:{pc}:{vg}:{rs}'] for pc in
                           partyCodes if pc.endswith('NPP')]))
 
@@ -517,7 +526,8 @@ with ZipFile("turnoutdata-raw.zip") as rzip:
                 for ph in partyCodes2:
                     pref = f"{area}:{ph}:{vg}:"
                     #print(f'turnout[{pref+"RSReg"}]={turnout.get(pref+"RSReg",None)}')
-                    if pref+"RSReg" in turnout or pref+"RSCst" in turnout:
+                    if (pref+"RSReg" in turnout or pref+"RSCst" in turnout or
+                        pref+"RSCnt" in turnout) :
                         cols = [turnout.get(pref+rs,"") for rs in RSCodes]
                         o.addline(area,vg,ph,*cols)
 
