@@ -1606,6 +1606,8 @@ with ZipFile("resultdata-raw.zip") as rzip:
                             RSRegSave_TO[area_id] = RSReg
                             for p in Party_IDs:
                                 area_party = area_id+p
+                                if area_party not in RSRegSave_TO:
+                                    continue
                                 RSRegSave_ED[area_party] = subQ(
                                     RSRegSave_TO[area_party],
                                     RSRegSave_MV[area_party])
@@ -1613,6 +1615,8 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         if subtotal_type == 'MV' or subtotal_type == 'ED':
                              for p in Party_IDs:
                                 area_party = area_id+p
+                                if area_party not in RSRegSave_TO:
+                                    continue
                                 RSRegSave_ED[area_party] = subQ(
                                     RSRegSave_TO[area_party],
                                     RSRegSave_MV[area_party])
