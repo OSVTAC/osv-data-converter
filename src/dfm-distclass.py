@@ -14,6 +14,10 @@ from tsvio import TSVReader, TSVWriter, DuplicateError
 from config import Config, config_whole_pattern_list, eval_config_pattern, eval_config_pattern_map, config_whole_pattern_map, PatternMap
 from typing import Union, List, Pattern, Match, Dict, Tuple
 
+import configEMS
+
+from configems import eval_prefix_map, load_ems_config
+
 DESCRIPTION = """\
 Reads the distnames.tsv, computes a classification, then creates the
 distclass.tsv according to the config-fixnames.yaml.
@@ -47,36 +51,7 @@ args = parse_args()
 distnames_header = "District_Code|District_Name|District_Short_Name"
 distclass_header = "District_Code|Classification|District_Name|District_Short_Name"
 
-def config_prefix_map(l:List[str])->List[Tuple[str,str]]:
-    """
-    Splits lines of the form str=str into a list of (str,str) tuples
-    """
-    if l is None:
-        return []
-    retval = []
-    for line in l:
-        m = re.match(r'^(.*?)=(.*)', line)
-        if not m:
-            raise InvalidConfig(f"Invalid Config Pattern Map '{line}'")
-        retval.append((m.group(1),m.group(2)))
-    return retval
-
-def eval_prefix_map(v:str,                      # Code value to check
-                    patlist:List[Tuple[str,str]] # List of (prefix,retval)
-                    )->str:                     # Returns value found or None
-    for (pat,retval) in patlist:
-        if v.startswith(pat):
-            return retval
-    return None
-
-
-CONFIG_FILE = "config-fixnames.yaml"
-config_attrs = {
-    "district_code_classification": config_prefix_map,
-    "default_district_id": [str]
-    }
-
-config = Config(CONFIG_FILE, valid_attrs=config_attrs)
+config = configEMS.load_ems_config()
 
 separator = "|" if args.pipe else "\t"
 
@@ -86,7 +61,7 @@ with TSVReader("distnames.tsv", validate_header=distnames_header) as r:
 
             for (District_Code, District_Name, District_Short_Name) in r.readlines():
 
-                c = eval_prefix_map(District_Code.upper(),
+                c = configEMS.eval_prefix_map(District_Code.upper(),
                                     config.district_code_classification)
 
                 if c==None:

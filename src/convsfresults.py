@@ -153,7 +153,7 @@ VOTING_STATS = OrderedDict([
     ])
 # These district subtotals are meaningless
 
-COUNTY_DISTRICT_ID = '0'
+COUNTY_DISTRICT_ID = 'COSF'
 countywide_districts = {COUNTY_DISTRICT_ID,'SEN11'}
 vgnamemap = {'Total':'TO',
              'Election Day':'ED',
@@ -1815,7 +1815,6 @@ with ZipFile("resultdata-raw.zip") as rzip:
                             'precincts_reporting': int(processed_done),
                             'total_precincts': int(total_precincts),
                             }
-                        conteststat['_id'] = contest_id
 
                         #Unused: conteststat['reporting_time'] = report_time_str
 #                        conteststat['no_voter_precincts'] = nv_pctlist

@@ -94,7 +94,7 @@ class Translator:
     def __init__(self,
                  filename:str,                      # translations.json
                  added_languages:str=ADDED_LANG_IDS,# space separated IDs
-                 keep_null_translations=False       # True to include "" translations
+                 keep_null_translations=True        # True to include "" translations
                  ):
         """
         Initialize a translator and load the translations.json definitions.

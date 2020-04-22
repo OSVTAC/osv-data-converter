@@ -60,6 +60,8 @@ def parse_args():
                         help='enable verbose info printout')
     parser.add_argument('-x', dest='crossover', action='store_true',
                         help='partisan primary with crossover voting')
+    parser.add_argument('-Z', dest='zero', action='store_true',
+                        help='make a zero report')
     parser.add_argument('-s', dest='regstat', action='store_true',
                         help='use regstat.tsv registration by party summary')
     parser.add_argument('-t', dest='novbmprecinct', action='store_true',
@@ -74,6 +76,11 @@ def parse_args():
 
 args = parse_args()
 separator = "|" if args.pipe else "\t"
+
+if args.zero:
+    OUT_DIR = "../out-orr/resultdata-zero"
+    TURNOUT_FILE = f"{OUT_DIR}/turnout.tsv"
+
 
 # Load the distpct.tsv file
 distpct_header = "Precinct_Set|District_Codes|Precincts"
@@ -528,7 +535,9 @@ with ZipFile("turnoutdata-raw.zip") as rzip:
                     #print(f'turnout[{pref+"RSReg"}]={turnout.get(pref+"RSReg",None)}')
                     if (pref+"RSReg" in turnout or pref+"RSCst" in turnout or
                         pref+"RSCnt" in turnout) :
-                        cols = [turnout.get(pref+rs,"") for rs in RSCodes]
+                        cols = ["" if pref+rs not in turnout else
+                                0 if rs!='RSReg' and args.zero else
+                                turnout.get(pref+rs,"") for rs in RSCodes]
                         o.addline(area,vg,ph,*cols)
 
     with TSVWriter('sdistpct.tsv',sort=False,sep=separator,

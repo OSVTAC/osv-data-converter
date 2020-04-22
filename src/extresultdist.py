@@ -74,6 +74,11 @@ with TSVReader("distmap.ems.tsv") as r:
 
 cont_by_dist = {}
 
+areas_by_dist = {}
+
+vg_by_area = {}
+
+
 with TSVWriter("reporting_groups.tsv", sep=separator, sort=False,
                header=reporting_groups_header, unique_col_check=0) as w:
     for f in glob.iglob("../out-orr/resultdata/results-*.tsv"):
@@ -90,14 +95,38 @@ with TSVWriter("reporting_groups.tsv", sep=separator, sort=False,
             logging.debug(f"Reading file({f})")
 
             # Collect the area~subtotal IDs
-            items = [];
+            items = []
+            areas = []
+            groups= []
+            last_area = ""
+
+            def flushGroup():
+                global groups, last_area
+                if last_area:
+                    vg_list = ' '.join(groups)
+                    if last_area in vg_by_area:
+                        if vg_by_area[last_area] != vg_list:
+                            raise Exception(f"Mismatch {last_area} {vg_by_area[last_area]} != {vg_list}")
+                    else:
+                        vg_by_area[last_area] = vg_list
+                    groups= []
+                last_area = area
+
 
             for cols in r.readlines():
-                if cols[0].startswith("RCV"):
+                area = cols[0]
+                if area.startswith("RCV"):
                     continue
-                items.append(f"{cols[0]}~{cols[1]}")
+                if area != last_area:
+                    flushGroup()
+                    areas.append(area)
 
+                groups.append(cols[1])
+                items.append(f"{area}~{cols[1]}")
+
+            flushGroup()
             reporting_group_ids = ' '.join(items)
+            areas_by_dist[district_id] = ' '.join(areas)
             try:
                 w.addline(district_id,reporting_group_ids)
             except:
@@ -105,5 +134,15 @@ with TSVWriter("reporting_groups.tsv", sep=separator, sort=False,
 
             cont_by_dist[district_id] = sov_id
 
+with TSVWriter("reporting_areas.tsv", sep=separator, sort=False,
+               header="district_id|reporting_area_ids", unique_col_check=0) as w:
+    for a,v in areas_by_dist.items():
+        w.addline(a,v)
+
+
+with TSVWriter("reporting_area_groups.tsv", sep=separator, sort=False,
+               header="area_id|voting_group_ids", unique_col_check=0) as w:
+    for a,v in vg_by_area.items():
+        w.addline(a,v)
 
 

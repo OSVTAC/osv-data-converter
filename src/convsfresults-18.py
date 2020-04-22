@@ -766,6 +766,8 @@ with ZipFile("resultdata-raw.zip") as rzip:
 
                 # Prepare the results.json
                 contest_status[contest_id] = conteststat = {
+                    '_id': contest_id,
+                    'heading':contest_full_name,
                     'precincts_reporting': int(processed_done),
                     #'reporting_time': '',
                     'total_precincts': int(total_precincts)
@@ -1042,6 +1044,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
 
                         conteststat['results_summary'] = [
                             s.strip() for s in [headerline] +
+                                contest_rcvlines +
                                 contest_totallines[:ntotals]]
 
                         flushcontest(contest_order, contest_id, contest_name,
@@ -1200,11 +1203,11 @@ with ZipFile("resultdata-raw.zip") as rzip:
                                     votes_required = 0
                                 if votes_required:
                                     if int(candvotes[0]) >= votes_required:
-                                        conteststat['success'] = True
+                                        conteststat['approval_met'] = True
                                         win_id = candids[0]
                                         lose_id = candids[1]
                                     else:
-                                        conteststat['success'] = False
+                                        conteststat['approval_met'] = False
                                         win_id = candids[1]
                                         lose_id = candids[0]
                                     winning_status[win_id] = 'W'
@@ -1273,7 +1276,8 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         conteststat['_id'] = contest_id
                         #conteststat['reporting_time'] = report_time_str
                         #conteststat['no_voter_precincts'] = nv_pctlist
-                        conteststat['rcv_rounds'] = rcv_rounds
+                        if hasrcv:
+                            conteststat['rcv_rounds'] = rcv_rounds
 
                         if rcv_rounds>1:
                             # Compute
@@ -1310,8 +1314,8 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         cont_winning_status = defaultdict(str)
                         for candid in candids:
                             status = winning_status_names[winning_status.get(candid,'')]
-                            if status != ('rcv_eliminated' if rcv_rounds
-                                          else 'not_winning'):
+                            if (status != 'rcv_eliminated' and status!='' and
+                                status != 'not_winning'):
                                 cont_winning_status[status]+=f"\t{candid}:{candnames[k]}"
                             if ADD_CHOICES:
                                 choice_js = {

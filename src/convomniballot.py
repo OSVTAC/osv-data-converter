@@ -39,11 +39,20 @@ import nameutil
 
 from omniutil import(form_bt_suffix)
 from translations import Translator
+from dataclasses import dataclass
 
-from config import (Config, config_pattern_list, eval_config_pattern,
+use_config2 = True
+if use_config2:
+    from config2 import (Config, config_pattern_list, eval_config_pattern,
+                    config_pattern_map, eval_config_pattern_remap,
+                    InvalidConfig, eval_config_pattern_map,
+                    StrictFlags)
+else:
+    from config import (Config, config_pattern_list, eval_config_pattern,
                     config_pattern_map, eval_config_pattern_remap,
                     config_strlist_dict, InvalidConfig, config_str_dict,
                     config_pattern_map_dict, eval_config_pattern_map)
+
 from re2 import re2
 from tsvio import TSVReader
 
@@ -81,7 +90,13 @@ approval_choice_namepat=re.compile(r'.*\b(yes|for)\b.*',flags=re.I)
 dont_uncapitalize_lang = {'zh'}
 lang_other = ['es','tl','zh']
 
+
+def raiseFormatError(s):
+    raise Exception(s)
+
 # Config file handling -----------------------
+
+
 
 def config_runoff(d:Dict)->List[Tuple]:
     """
@@ -123,10 +138,10 @@ config_attrs = {
     "bt_digits": int,
     "contest_map_file": str,
     "candidate_map_file": str,
-    "approval_required": config_strlist_dict,
-    "short_description": config_str_dict,
+    "approval_required": Dict[str,List[str]],
+    "short_description": Dict[str,str],
     "runoff": config_runoff,
-    "contest_name_corrections": config_pattern_map_dict,
+    "contest_name_corrections": Dict[str,config_pattern_map],
     "url_state_results_map": config_pattern_map,
     "url_state_results": str,
     "election_voting_district": str,
@@ -143,10 +158,40 @@ config_default = {
     "election_base_suffix": ""
     }
 
-APPROVAL_REQUIRED_PAT = re.compile('^(Majority|\d/\d|\d\d%)$')
+if use_config2:
+
+    @dataclass
+    class OmniConfig(Config):
+        trim_sequence_prefix:str                # Contest prefix to trim
+        retention_pats:config_pattern_list      # Retention contest patterns
+        contest_party_pats:config_pattern_list  # Party-only office patterns
+        contest_party_crossover_pats:config_pattern_list  # Crossover parties
+        contest_map_file:str                    # maps contest omniID
+        candidate_map_file:str                  # maps candidate omniID
+        approval_required:Dict[str,List[str]]   # approval required by measure name
+        short_description:Dict[str,str]         # Short description by measure title
+        runoff:config_runoff
+        contest_name_corrections: Dict[str, config_pattern_map]
+        url_state_results_map: config_pattern_map
+        url_state_results: str
+        election_base_suffix: str
+        district_code_map:Dict[str,str]
+        extid_contest_map:Dict[str,str]
+        extid_candidate_map:Dict[str,str]
+        extra_districts:Dict[str,Dict[str,str]]
+        external_id_prefixes:Dict[str,Dict[str,str]]
+        election_admin_area_id:str              # Election admin area id
+        # Attributes with set defaults must be at the end
+        bt_digits:int=3                         # Digits in ballot type id
+        election_voting_district: str="0"
+        turnout_result_style: str="EMT"
+        cand_extid_prefix: bool=True            # Add prefix to omni extid
+
+
+APPROVAL_REQUIRED_PAT = re.compile('^(Advisory|Majority|\d/\d|\d\d%)$')
 
 DEFAULT_JSON_DUMP_ARGS = dict(sort_keys=False, separators=(',\n',':'), ensure_ascii=False)
-PP_JSON_DUMP_ARGS = dict(sort_keys=False, indent=4, ensure_ascii=False)
+PP_JSON_DUMP_ARGS = dict(sort_keys=True, indent=4, ensure_ascii=False)
 
 class FormatError(Exception):pass # Error matching expected input format
 
@@ -693,7 +738,7 @@ def conv_bt_json(j:Dict, bt:str):
 
             m = re.search(r'up to (\w+) (?:choices|candidates)', vote_for_istr['en'])
             if m:
-                vote_for = m.group(1) if m.group(1).isnumeric() else word2num[m.group(1).lower()]
+                vote_for = int(m.group(1) if m.group(1).isnumeric() else word2num[m.group(1).lower()])
             else:
                 print(f"Failed to match number in {vote_for_istr['en']}")
                 vote_for = ""
@@ -781,7 +826,7 @@ def conv_bt_json(j:Dict, bt:str):
 
                 contj = contestjson[sequence] = {
                     "_id": mapped_id,
-                    "_id_ext": external_id,
+                    "_id_ext": scanextid(external_id, extcontmap),
                     "_type": _type,
                     "header_id": lastheader,
                     "ballot_title": translator.check(titles[0], context='contest'),
@@ -802,7 +847,6 @@ def conv_bt_json(j:Dict, bt:str):
                 else:
                     contj['votes_allowed'] = 1
                 if isrcv:
-                    contj['max_ranked'] = vote_for
                     contj['number_elected'] = 1
                 elif vote_for and not has_question:
                     contj['number_elected'] = vote_for
@@ -934,12 +978,12 @@ def conv_bt_json(j:Dict, bt:str):
                                cand_name, party, designation, cand_type)
                     candj = {
                         "_id": cand_mapped_id,
-                        "_id_ext": cand_external_id,
+                        "_id_ext": scanextid(cand_external_id,extcandmap),
                         "ballot_title": cand_names[0],
                         "sequence": cand_mapped_seq
                         }
-                    if has_question:
-                        print(f"Answer {cand_name} match={approval_choice_namepat.match(cand_name)}")
+                    #if has_question:
+                        #print(f"Answer {cand_name} match={approval_choice_namepat.match(cand_name)}")
                     if has_question and approval_choice_namepat.match(cand_name):
                         contj['approval_choice_id']=cand_mapped_id
                     if party_istr:
@@ -966,9 +1010,7 @@ def conv_bt_json(j:Dict, bt:str):
             if not found and contest_type != "header" and contest_type != "text":
                 if _type == "office":
                     contj['writeins_allowed'] = writein_lines
-                contj['voting_district'] = (distmap[external_id]
-                                if external_id in distmap else
-                                config.election_voting_district)
+                contj['voting_district'] = map_omnidist_to_areaid(external_id)
                 if isrcv:
                     if writein_lines:
                         contj['result_style'] = 'EMRW'
@@ -994,7 +1036,17 @@ def conv_bt_json(j:Dict, bt:str):
 
 args = parse_args()
 
-config = Config(CONFIG_FILE, valid_attrs=config_attrs, default_config=config_default)
+if use_config2:
+    config = OmniConfig.create_from_file(CONFIG_FILE,
+                                     strict=StrictFlags.WARN_EXTRA|
+                                            StrictFlags.WARN_INVALID)
+    #import pdb; pdb.set_trace()
+else:
+    config = Config(CONFIG_FILE, valid_attrs=config_attrs, default_config=config_default)
+
+# Computed defaults:
+if config.election_admin_area_id=="":
+    config.election_admin_area_id = config.election_voting_district
 
 json_dump_args = PP_JSON_DUMP_ARGS if args.pretty else DEFAULT_JSON_DUMP_ARGS
 
@@ -1118,13 +1170,23 @@ for p in lookups['precincts'].values():
     pct2extid[p['id']] = p['pid'] + pctsplitsep + p.get('sid','')
 
 # Check for a contest map
-if config.contest_map_file and os.path.isfile(config.contest_map_file) :
-    have_contmap = True
-    with TSVReader(config.contest_map_file) as r:
-        contmap = r.load_simple_dict(0,1)
-else:
-    have_contmap = False
-    contmap = {}
+def loadContestMap(filename):
+    """
+    loads a contest map as simple dictionary
+    """
+    if filename and os.path.isfile(filename) :
+        with TSVReader(filename) as r:
+            contmap = r.load_simple_dict(0,1)
+    else:
+        contmap = {}
+    return contmap
+
+contmap = loadContestMap(config.contest_map_file);
+extcontmap = {}
+for extp, filename in config.extid_contest_map.items():
+    extcontmap[extp] = loadContestMap(filename)
+
+
 
 # Retrieve short contest name from sov data
 # Disabled
@@ -1133,27 +1195,50 @@ else:
     #with TSVReader("../resultdata/contlist-sov.tsv") as r:
        #contid2name = r.load_simple_dict(1,3)
 
+def scanextid(external_id, extmap):
+    extids = ["omx:"+external_id]
+    if extmap:
+        for p,m in extmap.items():
+            if external_id in m:
+                extids.append(f"{p}:{m[external_id]}")
+    return ' '.join(extids)
+
 if os.path.isfile("distmap.ems.tsv"):
     with TSVReader("distmap.ems.tsv") as r:
         distmap = r.load_simple_dict(0,2)
 else:
     distmap = {}
 
+def map_omnidist_to_areaid(external_id):
+    if external_id not in distmap:
+        return config.election_voting_district
+    d = distmap[external_id]
+    return config.district_code_map.get(d,d)
+
 # Check for a candidate map
-candmap = {}
-candseq = {}
-if config.candidate_map_file:
-    have_candmap = True
-    candmap_header = "contest_id2|cand_id2|contest_id1|cand_id1|cand_seq|"\
+# Check for a contest map
+candmap_header = "contest_id2|cand_id2|contest_id1|cand_id1|cand_seq|"\
         "cand_name2|cand_name1"
-    with TSVReader(config.candidate_map_file) as r:
-        if r.headerline != candmap_header:
-            raiseFormatError(f"Unmatched {config.candidate_map_file} header {r.headerline}")
-        for cols in r.readlines():
-            candmap[cols[1]] = cols[3]
-            candseq[cols[1]] = cols[4]
-else:
-    have_candmap = False
+
+def loadCandidateMap(filename):
+    """
+    loads a contest map as simple dictionary
+    """
+    candmap = {}
+    candseq = {}
+    if filename and os.path.isfile(filename):
+        with TSVReader(filename) as r:
+            if r.headerline != candmap_header:
+                raiseFormatError(f"Unmatched {config.candidate_map_file} header {r.headerline}")
+            for cols in r.readlines():
+                candmap[cols[1]] = cols[3]
+                candseq[cols[1]] = cols[4]
+    return candmap, candseq
+
+candmap, candseq = loadCandidateMap(config.candidate_map_file)
+extcandmap = {}
+for extp, filename in config.extid_candidate_map.items():
+    extcandmap[extp], ignore = loadCandidateMap(filename)
 
 #print(f"candmap={candmap}")
 
@@ -1175,9 +1260,10 @@ if os.path.isfile("candlist-fix.tsv"):
                         title, party, designation, cand_type)
             mapped_id = mapContestID(cont_external_id)
             cand_mapped_id = mapCandID(external_id)
+
             candj = {
                 "_id": cand_mapped_id,
-                "_id_ext": external_id,
+                "_id_ext": scanextid(external_id, extcandmap),
                 "ballot_title": str2istr(title),
                 }
             if party:
@@ -1233,7 +1319,7 @@ for wiformat in range(1,len(writeinfiles)):
             newtsvline(writein_candlines,ContestId,seq,Id, Description)
             added_contcand.setdefault(ContestId,[]).append({
                 "_id": Id,
-                "_id_ext": ExternalId,
+                "_id_ext": "ds:"+ExternalId,
                 "ballot_title": str2istr(Description),
                 'is_writein': True
                 })
@@ -1318,6 +1404,72 @@ arealist = [{
 
 no_voter_precincts = []
 
+# Load the result groups by district
+reporting_groups_by_distid = {}
+reporting_areas_by_distid = {}
+if os.path.isfile("reporting_areas.tsv"):
+    with TSVReader("reporting_areas.tsv") as r:
+        reporting_areas_by_distid = r.load_simple_dict(0,1)
+    if os.path.isfile("reporting_area_groups.tsv"):
+        with TSVReader("reporting_area_groups.tsv") as r:
+            reporting_groups_by_distid = r.load_simple_dict(0,1)
+#if os.path.isfile("reporting_groups.tsv"):
+    #with TSVReader("reporting_groups.tsv") as r:
+        #reporting_groups_by_distid = r.load_simple_dict(0,1)
+else:
+    print("Run extresultdist.py to extract reporting groups")
+
+if os.path.isfile("../ems/distextids.tsv"):
+    with TSVReader("../ems/distextids.tsv") as r:
+        district_extid_list = r.load_simple_dict(0,2)
+    #print("district_county_list=",district_county_list)
+else:
+    district_extid_list = {}
+
+if os.path.isfile("../ems/distcounty.tsv"):
+    with TSVReader("../ems/distcounty.tsv") as r:
+        district_county_list = r.load_simple_dict(0,1)
+    #print("district_county_list=",district_county_list)
+else:
+    district_county_list = {}
+
+with TSVReader("../ems/distclass.tsv") as r:
+    if r.headerline != "District_Code|Classification|District_Name|District_Short_Name":
+        raiseFormatError(f"Unmatched distclass.tsv header {r.headerline}")
+    for cols in r.readlines():
+        (District_Code, Classification, District_Name, District_Short_Name) = cols
+
+        District_Code2 = config.district_code_map.get(District_Code,District_Code)
+        # TODO: Compute classification
+        d = {
+            "_id": District_Code2,
+            "name": District_Name,
+            "short_name": District_Short_Name,
+            "classification": Classification,
+        }
+        reporting_area_ids =  reporting_areas_by_distid .get(District_Code2,
+                         reporting_areas_by_distid.get(District_Code,""))
+        if reporting_area_ids:
+            d["reporting_area_ids"] = reporting_area_ids
+        reporting_group_ids = reporting_groups_by_distid.get(District_Code2,
+                         reporting_groups_by_distid.get(District_Code,""))
+
+        if reporting_group_ids and reporting_group_ids != 'TO':
+            d["reporting_group_ids"]=reporting_group_ids
+        if District_Code in district_extid_list:
+            d["_id_ext"] = district_extid_list[District_Code]
+            if District_Code2!=District_Code:
+                d['_id_ext'] += " dfm:"+District_Code
+        elif District_Code2!=District_Code:
+            d['_id_ext'] = "dfm:"+District_Code
+        if District_Code in district_county_list:
+            d["county_list"] = district_county_list[District_Code].split('; ')
+        arealist.append(d)
+
+    if config.extra_districts:
+        for k,v in config.extra_districts.items():
+            arealist.append(dict(_id=k, **v))
+
 pctconsfile = None
 for path in ["../ems/pctcons.tsv","../resultdata/pctcons-sov.tsv"]:
     if os.path.isfile(path):
@@ -1332,53 +1484,23 @@ else:
         for cols in r.readlines():
             (cons_precinct_id, cons_precinct_name, is_vbm, no_voters,
             precinct_ids) = cols
+            pct_area_id = "PCT"+cons_precinct_id
             area = {
-                "_id": "PCT"+cons_precinct_id,
+                "_id": pct_area_id,
                 "classification": "Precinct",
                 "name": cons_precinct_name,
                 "short_name": cons_precinct_name
             }
+            reporting_group_ids = reporting_groups_by_distid.get(pct_area_id,"")
+            if reporting_group_ids and reporting_group_ids != 'TO':
+                area["reporting_group_ids"]=reporting_group_ids
+
             if is_vbm=='Y':
                 area['is_vbm'] = True
             if no_voters=='Y':
                 area['has_no_voters'] = True
                 no_voter_precincts.append(cons_precinct_id)
             arealist.append(area)
-
-# Load the result groups by district
-if os.path.isfile("reporting_groups.tsv"):
-    with TSVReader("reporting_groups.tsv") as r:
-        reporting_groups_by_distid = r.load_simple_dict(0,1)
-else:
-    reporting_groups_by_distid = {}
-    print("Run extresultdist.py to extract reporting groups")
-
-if os.path.isfile("../ems/distcounty.tsv"):
-    with TSVReader("../ems/distcounty.tsv") as r:
-        district_county_list = r.load_simple_dict(0,1)
-    #print("district_county_list=",district_county_list)
-else:
-    district_county_list = {}
-
-with TSVReader("../ems/distclass.tsv") as r:
-    if r.headerline != "District_Code|Classification|District_Name|District_Short_Name":
-        raiseFormatError(f"Unmatched distnames.tsv header {r.headerline}")
-    for cols in r.readlines():
-        (District_Code, Classification, District_Name, District_Short_Name) = cols
-
-        # TODO: Compute classification
-        d = {
-            "_id": District_Code,
-            "name": District_Name,
-            "short_name": District_Short_Name,
-            "classification": Classification,
-            "reporting_group_ids": reporting_groups_by_distid.get(District_Code,"")
-        }
-        if District_Code in district_county_list:
-            d["county_list"] = district_county_list[District_Code].split('; ')
-        arealist.append(d)
-
-
 
 
 # TODO: Compute the election area (reporting area)
@@ -1394,6 +1516,7 @@ outj = {
     "election": {
         "election_date": election_date,
         "election_area": election_area,
+        "election_admin_area_id": config.election_admin_area_id,
         "ballot_title": translator.check(ballot_title,context="election"),
         "headers": [ headerjson[i] for i in sorted(headerjson) ],
         "contests": [ contestjson[i] for i in sorted(contestjson) ],
@@ -1415,6 +1538,8 @@ if config.url_state_results:
 
 
 outj.update(basejson)
+if config.external_id_prefixes:
+    outj['external_id_prefixes']=config.external_id_prefixes
 
 
 if not os.path.exists(OUT_DIR):
