@@ -426,6 +426,7 @@ with ZipFile("turnoutdata-raw.zip") as rzip:
 
 
     with TSVWriter(TURNOUT_FILE,sort=False,sep=separator,
+                    strip_trailing_sep=False,
                    header=f"area_id|subtotal_type|party|"+RSheader) as o:
         foundpct = set()
         for r in VBM_turnout:

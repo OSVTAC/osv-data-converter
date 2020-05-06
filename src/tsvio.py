@@ -373,6 +373,12 @@ class TSVWriter:
         self.path = path
         self.sep = sep
         self.header = header
+        if header:
+            self.headers = header.split('|')
+            self.ncols = len(self.headers)
+        else:
+            self.headers = []
+            self.ncols = 0
         self.sort = sort
         self.encoding = encoding
         self.unique_col_check = unique_col_check
@@ -417,6 +423,9 @@ class TSVWriter:
         line = self.sep.join(args)
         if self.strip_trailing_sep:
             line = line.rstrip(self.sep)
+        else:
+            if len(args)<self.ncols:
+                line += self.sep*(self.ncols-len(args))
         return(line+'\n')
 
     def addline(self,
