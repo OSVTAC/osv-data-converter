@@ -148,6 +148,7 @@ config_attrs = {
     "election_base_suffix": str,
     "cand_extid_prefix": bool,
     "turnout_result_style": str,
+    "turnout_party_ids":str,
     }
 
 config_default = {
@@ -155,8 +156,9 @@ config_default = {
     "turnout_result_style": "EMT",
     "election_voting_district": "0",
     "cand_extid_prefix": True,
-    "election_base_suffix": ""
-    }
+    "election_base_suffix": "",
+    "turnout_party_ids":"ALL AI DEM GRN LIB PF REP NPP",
+   }
 
 if use_config2:
 
@@ -186,9 +188,10 @@ if use_config2:
         election_voting_district: str="0"
         turnout_result_style: str="EMT"
         cand_extid_prefix: bool=True            # Add prefix to omni extid
+        turnout_party_ids: str="ALL AI DEM GRN LIB PF REP NPP"
 
 
-APPROVAL_REQUIRED_PAT = re.compile('^(Advisory|Majority|\d/\d|\d\d%)$')
+APPROVAL_REQUIRED_PAT = re.compile(r'^(Advisory|Majority|\d/\d|\d\d%)$')
 
 DEFAULT_JSON_DUMP_ARGS = dict(sort_keys=False, separators=(',\n',':'), ensure_ascii=False)
 PP_JSON_DUMP_ARGS = dict(sort_keys=True, indent=4, ensure_ascii=False)
@@ -232,7 +235,7 @@ def putfile(
     with open(filename,'w') as outfile:
         if separator != "|":
             headerline = re.sub(r'\|', separator, headerline)
-        outfile.write(headerline+'\n');
+        outfile.write(headerline+'\n')
         outfile.writelines(sorted(datalist))
 
 def jointsvline(
@@ -249,22 +252,6 @@ def newtsvline(
     Join a list of columns with \t and append \n, the add to datalist
     """
     datalist.append(jointsvline(*args))
-
-def newtsvlineu(
-    foundHash: Dict[str, str],   # Hash of unique lines by args[0]
-    datalist: List[str],    # List to build
-    errorPrefix: str,       # Duplicate error prefix
-    *args):
-    """
-    Calls newtsvline with a check for unique ID in args[0]
-    """
-    global linenum
-    line = jointsvline(*args)
-    if not args[0] in foundHash:
-        foundHash[args[0]] = line
-        datalist.append(line)
-    elif line !=foundHash[args[0]]:
-        print("{errorPrefix} {linenum}:\n {foundHash[args[0]]}  {line}" )
 
 def put_json_file(j, filename):
     with open(filename, "w", encoding='utf-8') as f:
@@ -894,6 +881,8 @@ def conv_bt_json(j:Dict, bt:str):
             party_rec = box["options"][0]["parties"][0]
             contest_party_id = party_rec.get('external_id',"")
             title_party += ':'+contest_party_id
+            global contest_party_ids
+            contest_party_ids[contest_party_id] += 1
             contest_party_crossover = bool(
                 eval_config_pattern(title_party,config.contest_party_crossover_pats))
             if not found:
@@ -1075,6 +1064,8 @@ foundlang = { "en" }
 ballot_title = None
 election_date = None
 
+contest_party_ids = defaultdict(int)
+
 approval_required_by_title = {}  # Approval required by measure title
 approval_required_by_contest = {}
 
@@ -1181,7 +1172,7 @@ def loadContestMap(filename):
         contmap = {}
     return contmap
 
-contmap = loadContestMap(config.contest_map_file);
+contmap = loadContestMap(config.contest_map_file)
 extcontmap = {}
 for extp, filename in config.extid_contest_map.items():
     extcontmap[extp] = loadContestMap(filename)
@@ -1314,7 +1305,7 @@ for wiformat in range(1,len(writeinfiles)):
                      andidate_party_id, is_writein_candidate) = cols
                 ExternalId = 'WI'+Id
                 if is_writein_candidate != 'Y':
-                    continue;
+                    continue
             seq += 1
             newtsvline(writein_candlines,ContestId,seq,Id, Description)
             added_contcand.setdefault(ContestId,[]).append({
@@ -1525,13 +1516,17 @@ outj = {
             "_type": "turnout",
             "ballot_title": translator["registration_and_turnout_header"],
             "voting_district": config.election_voting_district,
-            "result_style": config.turnout_result_style
+            "result_style": config.turnout_result_style,
+            "turnout_party_ids": config.turnout_party_ids,
         },
         "no_voter_precincts": no_voter_precincts,
     },
     "languages": sorted(foundlang),
     "areas": arealist
     }
+
+if contest_party_ids:
+    outj["election"]["contest_party_ids"] = ' '.join((contest_party_ids).keys())
 
 if config.url_state_results:
     outj["election"]["url_state_results"] = config.url_state_results

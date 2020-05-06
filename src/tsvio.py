@@ -43,9 +43,12 @@ TSV writing capability will be added later.
 
 import re
 import io
-from typing import Dict, Tuple, List, TextIO, Union
-from collections import OrderedDict
+import os.path
+from typing import Dict, Tuple, List, Set, TextIO, Union, NamedTuple, Iterable
+from collections import OrderedDict, namedtuple
 import logging
+import gzip
+from zipfile import ZipFile
 from dataclasses import dataclass
 
 UTF8_ENCODING = 'utf-8'
@@ -100,6 +103,14 @@ def split_line(
 
     return [f.translate(mapdata) if mapdata else f for f in line.split(sep)]
 
+def alphanumeric_sort_key(key:str)->str:
+    """
+    Returns a sort key with numbers expanded to 6 digits
+    """
+
+    return re.sub(r'\d+',lambda m: m.group(0).zfill(6), key)
+
+
 
 @dataclass
 class TSVReader:
@@ -125,21 +136,40 @@ class TSVReader:
     the characters '\t|,' will be searched in the header line (if
     read) to automatically set the separator, otherwise tab is assumed.
 
+    If the path ends in .gz it will be opened with gzip.
+
+    A member of a .zip file can be written as a directory
+    path where the .zip is written like a directory,
+    e.g. archive.zip/data.tsv
+
     Args:
         path: the path to open, as a path-like object.
     """
-    path:str               # filename to read
+    path:Union[str,io.IOBase]  # filename to read or io
     sep:str=None           # delimiter separating fields
     read_header:bool=True  # Read and save the header
     encoding:str=UTF8_ENCODING
     binary_decode:bool=False   # True for external decode
     trim_quotes:str=None       # Quote character to trim
     opener:open=None           # External opener
-    validate_header:str=None   # Expected header
+    validate_header:Union[str,Set[str]]=None   # Expected header(s)
+    strip_spaces:bool=False    # Strip leading and trailing spaces
 
     def __enter__(self):
+        # Check for a zipfile
+        self.zipfile = None
+        if isinstance(self.path, str) and not self.opener:
+            m = re.match(r'^(.+\.zip)/(.+)', self.path)
+            if m and os.path.isfile(m.group(1)):
+                self.zipfile = ZipFile(m.group(1))
+                self.path = m.group(2)
+                self.opener = self.zipfile
+                self.binary_decode = True
+        
         self.f = (self.opener.open(self.path) if self.opener else
                   self.path if isinstance(self.path, io.IOBase)
+                  else gzip.open(self.path, 'rt', encoding=self.encoding)
+                  if self.path.endswith(".gz")
                   else open(self.path, encoding=self.encoding))
         if self.read_header:
             # The first line is a header with field names and column count
@@ -158,8 +188,11 @@ class TSVReader:
             self.header = split_line(line,self.sep)
             self.headerline = "|".join(self.header)
             self.num_columns = len(self.header)
-            if self.validate_header and self.headerline != self.validate_header:
-                raise RuntimeError(f"Mismatched header in {self.path}:\n   {self.headerline}\n!= {self.validate_header}")
+            if self.validate_header:
+                if (self.headerline not in self.validate_header if
+                    isinstance(self.validate_header, set)
+                    else self.headerline != self.validate_header):
+                    raise RuntimeError(f"Mismatched header in {self.path}:\n   {self.headerline}\n!= {self.validate_header}")
 
         else:
             if self.sep is None:
@@ -174,6 +207,8 @@ class TSVReader:
         Defines an context manager exit to so this can be used in a with/as
         """
         self.f.close()
+        if self.zipfile:
+            self.zipfile.close()
         self.f = None
 
     def __repr__(self):
@@ -194,6 +229,8 @@ class TSVReader:
             l = [s[1:-1] if len(s)>=2 and
                      s[0] in self.trim_quotes and s[-1] in self.trim_quotes
                  else s for s in l]
+        if self.strip_spaces:
+            l = [s.strip() for s in l]
         if len(l) < self.num_columns:
             # Extend the list with null strings to match header count
             l.extend([ '' ] * (self.num_columns - len(l)))
@@ -226,26 +263,57 @@ class TSVReader:
         except:
             return None
 
-    def readdict(self):
+    def readdict(self)->Iterable[Dict[str,str]]:
         """
         Iterator to return a dict of values by header field name
         """
         for l in self.readlines():
             yield dict(zip(self.header,l))
 
-    def loaddict(self,
-                 keycolumn=0    # Column for ID
-                 )->Dict:
+    def readtuple(self, typename:str)->Iterable[NamedTuple]:
+        """
+        Iterator to return a namedtuple of values by header field name
+        """
+        typename = re.sub(r'\W+','_',typename)
+        self.namedtuple = namedtuple(typename,self.header)
+        for l in self.readlines():
+            yield self.namedtuple(*l)
+
+    def load_tuple_dict(self,
+                 typename:str,  # Name for the tuple type
+                 keycolumn:Union[int,str]=0    # Column for ID
+                 )->Dict[str,NamedTuple]:
         """
         Load lines of the file into a dictionary by key column with readdict hash
         """
+        self.namedtuple = namedtuple(typename,self.header)
+        if isinstance(keycolumn,str):
+            keycolumn = self.header.index(keycolumn)
         h = {}
         for l in self.readlines():
             key = l[keycolumn]
             if key in h:
                 global _log
                 _log.error(f"Duplicate key '{key}' at {self.path}:{self.line_num}")
-                continue;
+                continue
+            h[key] = self.namedtuple(*l)
+        return h
+
+    def loaddict(self,
+                 keycolumn:Union[int,str]=0    # Column for ID
+                 )->Dict[str,Dict[str,str]]:
+        """
+        Load lines of the file into a dictionary by key column with readdict hash
+        """
+        h = {}
+        if isinstance(keycolumn,str):
+            keycolumn = self.header.index(keycolumn)
+        for l in self.readlines():
+            key = l[keycolumn]
+            if key in h:
+                global _log
+                _log.error(f"Duplicate key '{key}' at {self.path}:{self.line_num}")
+                continue
             h[key] = dict(zip(self.header,l))
         return h
 
@@ -265,7 +333,7 @@ class TSVReader:
             key = l[keycolumn]
             if key in h:
                 _log.error(f"Duplicate key '{key}' at {self.path}:{self.line_num}")
-                continue;
+                continue
             h[key] = l[valcolumn]
         return h
 
@@ -297,7 +365,9 @@ class TSVWriter:
         the column that contains an ID that must be unique. If not it will
         raise the DuplicateError exception.
 
-        Args:
+        If the path ends in .gz it will be opened with gzip
+
+       Args:
           path: the path to open, as a path-like object.
         """
         self.path = path
@@ -313,7 +383,9 @@ class TSVWriter:
 
 
     def __enter__(self):
-        self.f = open(self.path, "w", encoding=self.encoding)
+        self.f = (gzip.open(self.path, "wt", encoding=self.encoding)
+                if self.path.endswith(".gz") else
+                    open(self.path, "w", encoding=self.encoding))
         # Write a header if defined
         if self.header:
             if self.sep != "|":
@@ -327,7 +399,7 @@ class TSVWriter:
         """
         if self.lines:
             if self.sort:
-                self.lines = sorted(self.lines)
+                self.lines = sorted(self.lines, key=alphanumeric_sort_key)
             self.f.writelines(self.lines)
         self.f.close()
         self.f = None

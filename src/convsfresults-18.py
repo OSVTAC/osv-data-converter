@@ -260,6 +260,8 @@ json_dump_args = PP_JSON_DUMP_ARGS if args.pretty else DEFAULT_JSON_DUMP_ARGS
 
 separator = "|" if args.pipe else "\t"
 
+linenum = 0
+
 # Save registration by subtotal and precinct
 # RSRegSave['MV']['PCT1101'] has registration for vote by mail in precinct 1101
 RS_Area_Table = Dict[Area_Id,int]
@@ -313,7 +315,7 @@ def putfile(
     with open(filename,'w') as outfile:
         if separator != "|":
             headerline = re.sub(r'\|', separator, headerline)
-        outfile.write(headerline+'\n');
+        outfile.write(headerline+'\n')
         outfile.writelines(sorted(datalist))
 
 def jointsvline(
@@ -379,7 +381,7 @@ def  flushcontest(contest_order, contest_id, contest_name,
     with open(filename,'w') as outfile:
         if separator != "|":
             headerline = re.sub(r'\|', separator, headerline)
-        outfile.write(headerline);
+        outfile.write(headerline)
         if contest_rcvlines:
             outfile.writelines(contest_rcvlines)
         outfile.writelines(contest_totallines)
@@ -409,7 +411,7 @@ def checkDuplicate(d:Dict[str,str],  # Dict to set/check
         d[key] = val
     elif d[key] != val:
         print(f"Duplicate {msg} for {key}->{val}!={d[key]} at {linenum}")
-        raise
+        raise Exception("Duplicate Dict entry")
 
 def loadEligible()->int:
     """
@@ -885,7 +887,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
         # Load Neighborhood abbr mapping
         try:
             with TSVReader("../ems/distname-orig.tsv",
-                           read_header=False) as reader:
+                           read_header=True) as reader:
                 distabbr2code = reader.load_simple_dict(1,0)
         except Exception as ex:
             distabbr2code = {}
@@ -994,7 +996,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                 resultlist = resultlistbytype[rs_group]
 
                 headers = ['area_id','subtotal_type'
-                           ] + resultlist + candheadings;
+                           ] + resultlist + candheadings
                 headerline = jointsvline(*headers)
                 if args.verbose:
                     print(f"Contest({contest_id}/{contest_id_eds}:{rs_group} v={vote_for} {district_name_abbr}--{contest_name}")

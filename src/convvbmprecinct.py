@@ -13,6 +13,7 @@ import os.path
 import sys
 import re
 import argparse
+import distpctutils
 
 from tsvio import TSVReader, TSVWriter
 from zipfile import ZipFile
@@ -83,16 +84,14 @@ if args.zero:
 
 
 # Load the distpct.tsv file
-distpct_header = "Precinct_Set|District_Codes|Precincts"
-
+# Get the precincts in neighborhoods
 precinctNeigh = {}
-with GzipFile("../ems/distpct.tsv.gz") as rzip:
-    with TSVReader(rzip,validate_header=distpct_header,binary_decode=True) as f:
-        for (Precinct_Set, District_Codes, Precincts) in f.readlines():
-            if not District_Codes.startswith('NEIG'):
-                continue
-            for pct in Precincts.split():
-                precinctNeigh[pct] = District_Codes
+distpct = distpctutils.load_distpct("../ems/distpct.tsv.gz")
+for district_id, precinct_set in distpct.items():
+    if not district_id.startswith('NEIG'):
+        continue
+    for pct in precinct_set.split():
+        precinctNeigh[pct] = district_id
 
 
 distHeadMap=dict(
@@ -358,15 +357,6 @@ def NPPCrossover(party_id:str)->str:
     return 'NPP' if (party_id.endswith("NPP")
                     or party_id.startswith("NPP")) else party_id
 
-
-def getPrecinctPartyReg(area_id:str, party_id:str)->int:
-    """
-    Retrieve the registration count for an area and party.
-    For NPP crossover, use the NPP total
-    """
-    # Trim party prefix before NPP, so crossover use the whole NPP
-    return precinctPartyReg.get(f"{area_id}:{NPPCrossover(party_id)}",None)
-
 def appendNPPALL(cols:List[int]):
     """
     Compute the sum of xxxNPP columns and append as NPPALL
@@ -487,7 +477,7 @@ with ZipFile("turnoutdata-raw.zip") as rzip:
 
                 for pc, ph in zip(partyCodes, partyHeadings):
                     for gh,gc in zip(groupHeadings,groupCodes):
-                        v = int(r[ph+gh]);
+                        v = int(r[ph+gh])
                         if gc=='RSCst' and pc=='ALL':
                             # Reset the total ballots case
                             k = f'{pcta}:ALL'
@@ -530,6 +520,7 @@ with ZipFile("turnoutdata-raw.zip") as rzip:
         sdists = sorted(sdistpct.keys(), key=sortkey)
         for area in sorted(allpcts)+sdists:
             for vg in voting_groups:
+                foundLast = None
                 for ph in partyCodes2:
                     pref = f"{area}:{ph}:{vg}:"
                     #print(f'turnout[{pref+"RSReg"}]={turnout.get(pref+"RSReg",None)}')
@@ -539,6 +530,10 @@ with ZipFile("turnoutdata-raw.zip") as rzip:
                                 0 if rs!='RSReg' and args.zero else
                                 turnout.get(pref+rs,"") for rs in RSCodes]
                         o.addline(area,vg,ph,*cols)
+                        foundLast = ph
+                    elif foundLast=="ALL":
+                        o.addline(area,vg,"*")
+                        break
 
     with TSVWriter('sdistpct.tsv',sort=False,sep=separator,
                    header="area_id|precinct_ids") as o:
