@@ -90,9 +90,11 @@ approval_choice_namepat=re.compile(r'.*\b(yes|for)\b.*',flags=re.I)
 dont_uncapitalize_lang = {'zh'}
 lang_other = ['es','tl','zh']
 
+# 
+isRCVTextPat = re.compile(r'\b(rank up to|rank candidates in the order)\b',
+                            flags=re.I)
 
-def raiseFormatError(s):
-    raise Exception(s)
+
 
 # Config file handling -----------------------
 
@@ -135,6 +137,7 @@ config_attrs = {
     "retention_pats": config_pattern_list,  # Match retention candidate names
     "contest_party_pats": config_pattern_list,  # Match contests with party
     "contest_party_crossover_pats": config_pattern_list,  # Match contests with party
+    "running_mate_pats": config_pattern_list,  # Match contests with running mate
     "bt_digits": int,
     "contest_map_file": str,
     "candidate_map_file": str,
@@ -168,6 +171,7 @@ if use_config2:
         retention_pats:config_pattern_list      # Retention contest patterns
         contest_party_pats:config_pattern_list  # Party-only office patterns
         contest_party_crossover_pats:config_pattern_list  # Crossover parties
+        running_mate_pats:config_pattern_list   # Contest with running mate
         contest_map_file:str                    # maps contest omniID
         candidate_map_file:str                  # maps candidate omniID
         approval_required:Dict[str,List[str]]   # approval required by measure name
@@ -558,13 +562,34 @@ def clean_paragraphs(
     Remove superflous <p>..</p> wrapper
     Remove duplicate headings in <strong>
     """
-    for p in paragraphs:
+    # Merge a 2 paragraph title, the first with <strong>, second without
+    merge_paragraphs = False
+    if (len(paragraphs)==2):
+        p0 = paragraphs[0]['en']
+        p1 = paragraphs[1]['en']
+        if p0=="<strong></strong>":
+            # For english without bold header, delete paragraph 0 but
+            # move chinese etc. strong text t paragraph 1
+            p = paragraphs[0]
+            for lang, v in p.items():
+                if v=="<strong></strong>": next
+                paragraphs[1][lang]=v+" "+paragraphs[1][lang]
+            del paragraphs[0]
+        else:
+            merge_paragraphs = (p0.count("<strong")==1 and
+                                p1.count("<strong")==0 and
+                                p0.endswith("</strong>"))
+    for i,p in enumerate(paragraphs):
         m = re_strong_pat.search(p['en'])
-        remove_strong = title and m and m.group(1) == title['en']
+        remove_strong = title and m and m.group(1) == title['en'] and not merge_paragraphs
         for lang in p.keys():
             if p[lang].count("<p") > 1:
                 continue
             p[lang] = re.sub(r'^\s*<p\b[^<>]*>\s*(.*?)\s*</p>\s*$',r"\1", p[lang])
+            if merge_paragraphs:
+                if i>0:
+                    paragraphs[0][lang] += " " + p[lang]
+                continue
             if p[lang].count("<strong") == 1:
                 p[lang] = re.sub(r'^<strong>\s*(.*?)\.?\s*</strong>$',r"\1", p[lang])
             if remove_strong:
@@ -579,6 +604,9 @@ def clean_paragraphs(
                     p[lang] = re_strong_pat.sub('',p[lang])
                 else:
                     print(f"Warning: Heading missing for {title['en']}: {title[lang]} != {p[lang]}")
+
+    if merge_paragraphs:
+        del paragraphs[1:]
 
 def extract_titles(paragraphs:List[Dict])->List[Dict]:
     """
@@ -630,7 +658,7 @@ def conv_bt_json(j:Dict, bt:str):
         date_prefix = m.group(1)
     else:
         election_title_en = re.sub(r'(\d+)(st|nd|rd|th), (20\d\d)',r'\1, \3',election_title_en)
-        m = re.match(r'^(.*?)[ \- ,]+((:?January|February|March|April|May|June|July|August|September|October|November|December) +(\d+), +(20\d\d))\b',
+        m = re.match(r'^(?:(.*?)[ \- ,]+)?((:?January|February|March|April|May|June|July|August|September|October|November|December) +(\d+), +(20\d\d))\b',
                   election_title_en)
         if m:
             # 2020 format, month day, year format
@@ -654,10 +682,10 @@ def conv_bt_json(j:Dict, bt:str):
 
     contlist = []
 
-    for box in j["boxes"]:
+    for ibox,box in enumerate(j["boxes"]):
         contest_id = str(box["id"])
         found = contest_id in foundContest
-        sequence = str(box["sequence"]).zfill(3)
+        sequence = str(box["sequence"]).zfill(4)
         if config.trim_sequence_prefix:
             # RCV reordering hack by adding the prefix 9
             if len(sequence)>3 and sequence.startswith(config.trim_sequence_prefix):
@@ -682,9 +710,9 @@ def conv_bt_json(j:Dict, bt:str):
             isrcv = True
         elif (external_id.endswith('-rcheader') or
               (len(paragraphs)==1 and
-               paragraphs[0].get('en',"").startswith('You may rank up to')) or
+               isRCVTextPat.search(paragraphs[0].get('en',""))) or
               (len(titles)==2 and
-               titles[1].get('en',"").startswith('Rank up to'))):
+               isRCVTextPat.search(titles[1].get('en',"")))):
             # Save the title and heading for contest that follows
             lastrcvtitle = titles
             lastrcvtext = paragraphs
@@ -705,7 +733,7 @@ def conv_bt_json(j:Dict, bt:str):
                 vote_for = int(m.group(1))
             else:
                 try:
-                    vote_for = word2num[re.search(r'(\w+)$',
+                    vote_for = word2num[re.search(r'(\w+)( Party)?$',
                                         vote_for_istr['en']).group(1).lower()]
                 except:
                     print(f"Failed to match number in {vote_for_istr['en']}")
@@ -726,6 +754,16 @@ def conv_bt_json(j:Dict, bt:str):
             m = re.search(r'up to (\w+) (?:choices|candidates)', vote_for_istr['en'])
             if m:
                 vote_for = int(m.group(1) if m.group(1).isnumeric() else word2num[m.group(1).lower()])
+            elif "Rank candidates in the order" in vote_for_istr['en']:
+                # The number to rank is not given. Compute it by looking
+                # at subsequent boxes.
+                boxes = j["boxes"]
+                while ibox<len(boxes):
+                    m = re.match(r'(\d+)(st|nd|rd|th) Choice',
+                                 boxes[ibox]['titles'][0]['value'])
+                    if not m: break
+                    vote_for = int(m.group(1))
+                    ibox = ibox+1              
             else:
                 print(f"Failed to match number in {vote_for_istr['en']}")
                 vote_for = ""
@@ -740,7 +778,7 @@ def conv_bt_json(j:Dict, bt:str):
 
 
         if len(paragraphs)>1:
-            raise FormatError(f"Multiple text paragraphs for {sequence}:{title}")
+            raise FormatError(f"Multiple text paragraphs for {sequence}:{title}|{paragraphs}")
 
         mapped_id = mapContestID(external_id)
 
@@ -915,6 +953,9 @@ def conv_bt_json(j:Dict, bt:str):
         candids = []
         lastseq = "000"
 
+        hasRunningMate = eval_config_pattern(title, config.running_mate_pats)
+        partySelection = vote_for_istr and "Party" in vote_for_istr['en']
+ 
         if "options" in box:
             # Contest with a list of choices
             writein_lines = 0
@@ -932,14 +973,15 @@ def conv_bt_json(j:Dict, bt:str):
                 #if mapped_id == "342":
                     #print(f"id={cand_id}:{cand_external_id}:{cand_mapped_id}")
                 candids.append(cand_external_id)
-                cand_seq = str(o["sequence"]).zfill(3)
+                cand_seq = str(o["sequence"]).zfill(4)
                 cand_mapped_seq = candseq.get(cand_external_id,cand_seq)
                 cand_names = conv_titles(o["titles"])
-                designation = party = ""
-                designation_istr = party_istr = None
+                designation = party = running_mate = ""
+                designation_istr = party_istr = running_mate_istr = None
                 if len(cand_names)>1:
-                    designation_istr = cand_names.pop()
-                    designation = designation_istr['en']
+                    if not (hasRunningMate and partySelection):
+                        designation_istr = cand_names.pop()
+                        designation = designation_istr['en']
                     if len(cand_names)>1:
                         party_istr = cand_names.pop()
                         party = party_istr['en']
@@ -950,18 +992,24 @@ def conv_bt_json(j:Dict, bt:str):
                         party = designation
                         designation = tmp_des
                         designation_istr = tmp_des_istr
+                    if hasRunningMate:
+                        running_mate_istr = cand_names.pop()
+                        running_mate = running_mate_istr['en']
+
                 if len(cand_names)!=1:
                     raise FormatError("Strange candidate {cand_id} in {contest_id}:{title}")
 
                 cand_name = cand_names[0]['en']
                 party = re.sub(r'^Party Preference:\s*','', party)
 
-                if int(cand_seq) <= int(lastseq):
+                if int(cand_seq) <= int(lastseq) and lastseq != '000':
                     raise FormatError(
         f"Out of sequence {contest_id}:{cand_id}:{cand_name} {lastseq}..{cand_seq}")
                 cand_type = o['type']
                 lastseq = cand_seq
                 if not found:
+                    # if running_mate:
+                    #     cand_name += " and " + running_mate
                     newtsvline(candlines, sequence, external_id,
                                cand_seq, cand_id, cand_external_id,
                                cand_name, party, designation, cand_type)
@@ -982,6 +1030,8 @@ def conv_bt_json(j:Dict, bt:str):
                             candj['candidate_party_id'] = party_id
                     if designation_istr:
                         candj['ballot_designation'] = designation_istr
+                    if running_mate_istr:
+                        candj['running_mate'] = running_mate_istr
                     contj['choices'].append(candj)
             # End loop over contest choices
             # Sort by sequence

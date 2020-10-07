@@ -17,7 +17,7 @@ from collections import defaultdict
 from typing import Union, List, Pattern, Match, Dict, Tuple, Optional
 
 import configEMS
-import distutils
+from distpctutils import load_distnames
 
 DESCRIPTION = """\
 Collects the list of contests by district in the contlist and measlist
@@ -101,9 +101,9 @@ scan_file(find_file("contlist.tsv contlist-orig.tsv"),contlist_header)
 scan_file(find_file("measlist.tsv measlist-orig.tsv"),measlist_header)
 
 # Load the district name dictionary
-distnames = distutils.load_distnames()
+distnames = load_distnames()
 
-with TSVWriter("distcont.tsv", sep=separator, header=distcont_header) as w:
+with TSVWriter("edistcont.tsv", sep=separator, header=distcont_header) as w:
     for district_id, contest_ids in distcont.items():
         w.addline(district_id, distnames[district_id], ' '.join(sorted(contest_ids)))
 

@@ -195,6 +195,9 @@ class CandContMatch:
         Define a contest ID associated with a candidate name
         """
 
+        # Strip running mate using AND or /
+        cand_name = re.sub(r'(\w+\W+\w+\.?)( */ *| and )\w+.*',r"\1",cand_name,flags=re.I)
+
         # Use a converted name for case and unicode insensitive matching
         key = self.cand_name_key(cand_name)
         if self.question_choice_pat.match(key):

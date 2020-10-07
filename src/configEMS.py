@@ -7,12 +7,14 @@ Configuration file definition for processing EMS data
 """
 
 from dataclasses import dataclass
-from typing import Union, List, Pattern, Match, Dict, Tuple, Optional
-from config2 import (Config, StrictFlags, config_pattern, InvalidConfig)
+from typing import Union, List, Pattern, Match, Dict, Tuple, Optional, Set
+from config2 import (Config, StrictFlags, config_pattern, InvalidConfig,
+                     config_idlist, )
 
 # Extended types
 DistrictId = str                # ID Code for a district
 DistrictIdPrefix = str          # Partial District ID Code
+PartyId = str                   # Party ID
 RandomAlphabetName = str        # Randomized alphabet name
 RandomAlphabet = str            # 26 Letter randomization of A-Z
 DistrictClassification = str    # District Classification Code
@@ -51,7 +53,7 @@ class EMSConfig(Config):
      # Map district code prefix to classification:
     district_code_classification: Dict[DistrictIdPrefix,DistrictClassification]
     # List of classification for results summary:
-    summary_DistrictClassifications: List[DistrictClassification]
+    summary_district_classifications: List[DistrictClassification]
 
     # For extracting poll location address
     poll_location_columns: ColumnNames             # Column ID(s) for poll location/site name
@@ -64,6 +66,11 @@ class EMSConfig(Config):
 
     # For adjustment of the voting district for countywide contests:
     contest_district_map:Dict[DistrictId,List[config_pattern]]
+
+    # For extracting content from EMS reports:
+    party_heading_map: Dict[PartyId, str]       # Party ID to header map
+    party_id_order: config_idlist               # Party ID order
+    no_voter_precincts: config_idlist           # Precincts to ignore
 
     # For computation of candidate rotations
     # Alphabet A-Z for each random alphabet used:

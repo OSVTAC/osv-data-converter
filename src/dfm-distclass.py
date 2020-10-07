@@ -16,11 +16,9 @@ from typing import Union, List, Pattern, Match, Dict, Tuple
 
 import configEMS
 
-from configems import eval_prefix_map, load_ems_config
-
 DESCRIPTION = """\
 Reads the distnames.tsv, computes a classification, then creates the
-distclass.tsv according to the config-fixnames.yaml.
+distclass.tsv according to the config-ems.yaml.
 
 """
 VERSION='0.0.1'     # Program version
@@ -39,8 +37,6 @@ def parse_args():
                         help='enable verbose info printout')
     parser.add_argument('-w', '--warn', action='store_true',
                         help='enable verbose warnings')
-    parser.add_argument('-p', dest='pipe', action='store_true',
-                        help='use pipe separator else tab')
 
     args = parser.parse_args()
 
@@ -53,7 +49,7 @@ distclass_header = "District_Code|Classification|District_Name|District_Short_Na
 
 config = configEMS.load_ems_config()
 
-separator = "|" if args.pipe else "\t"
+separator = config.tsv_separator
 
 with TSVReader("distnames.tsv", validate_header=distnames_header) as r:
 

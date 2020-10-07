@@ -9,35 +9,38 @@ Script to strip spaces from a copy and paste randomized alphabet
 import re
 
 a = """
-    A
-    Z
-    R
-    C
-    H
-    E
-    W
 
+
+    B
+    A
+    E
+    Z
+    T
     L
-    F
-    N
-    Y
-    X
+    G
+
+    H
+    P
     O
+    S
+    N
+    M
     D
 
-    K
-    S
-    M
-    J
-    P
     Q
-    V
-
-    U
-    B
-    G
+    F
     I
-    T
+    C
+    V
+    U
+    X
+
+    Y
+    K
+    W
+    R
+    J
+
 """
 a_seq = re.sub(r'\s+','', a)
 a_inv = [' ']*26

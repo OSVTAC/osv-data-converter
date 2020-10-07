@@ -5,6 +5,83 @@
 """
 Program to convert the CFMJ001 contest/candidate list output files:
 
+Input file format:
+
+CFMJ001_ContestData.tsv 
+    Field Name                     Sample
+-------------------------------------------------------------
+ 1  ELECTION                       March 3 2020 Consolidated Presidential Primary Election
+ 2  CONTESTID                      100
+ 3  CONTESTTITLE1                  PRESIDENT DEM
+ 4  CONTESTTITLE2                  District 12
+ 5  NUMTOVOTFOR                    1
+ 6  TERMOFOFFICE                   4
+ 7  FILINGFEE                      0
+ 8  NUMOFCANDS                     20
+ 9  NUMQUALIFIEDCANDS              20
+10  NUMTOVOTFOR                    1
+11  DECOFINTENT                    0
+12  FILINGEXTENSION                0
+13  CANDSTMT                       0
+14  DISTRICTID                     *0
+15  SUBDISTRICT                    0
+16  CONTESTPARTY                   DEM
+
+CFMJ001_ContestCandidateData.tsv 
+   Field Name                     Sample
+-------------------------------------------------------------
+ 1  iContestID                     100
+ 2  szBallotHeading                FEDERAL
+ 3  szSubHeading                   
+ 4  szOfficeTitle                  PRESIDENT OF THE UNITED STATES-DEM
+ 5  szOfficeAbbr1                  PRESIDENT DEM
+ 6  szOfficeAbbr2                  DEM
+ 7  sGoesIntoExtension             N
+ 8  iNumToVoteFor                  1
+ 9  iOfficeOnBallot                1
+10  iNumQualified                  20
+11  iNumCandidates                 20
+12  iCandidateID                   6
+13  szCandidateName                MICHAEL BENNET
+14  szBallotDesignation            Member of Congress
+15  iIncumbent                     0
+16  dtQualified                    12/11/2019 12:48:00 PM
+17  dtSigsInLieuFiled_dt           11/6/2019
+18  dtSigsInLieuIssued_dt          
+19  dtDecOfIntentIssued_dt         
+20  dtDecOfIntentFiled_dt          
+21  dtNOMIssued_dt                 11/14/2019
+22  dtNomFiled_dt                  12/6/2019
+23  dtFilingFeePaid_dt             11/14/2019
+24  dtCandStmtFiled_dt             12/6/2019
+25  dtCandStmtIssued_dt            11/14/2019
+26  dtDecOfCandIssued_dt           11/21/2019
+27  dtDecOfCandFiled_dt            12/5/2019
+28  dtCodeFairCampFiled_dt         
+29  sUserCode1                     F
+30  sUserCode2                     
+31  szResAddress1                  
+32  szResAddress2                  
+33  szResAddress3                  
+34  szMailAddr1                    
+35  szMailAddr2                    
+36  szMailAddr3                    
+37  szMailAddr4                    
+38  szBusinessAddr1                
+39  szBusinessCity                 
+40  szBusinessState                
+41  szBusinessZip                  
+42  sBusinessPhone                 
+43  sHomePhone                     
+44  sFaxNo                         
+45  szEmailAddress                 
+46  sPartyAbbr                     
+47  szPartyName                    
+48  sCampaignPhone                 
+49  sCampaignFax                   
+50  sCampaignMobile                
+51  szWebAddress                   
+52  sElectronicCandStmt            No
 
 """
 
@@ -12,6 +89,8 @@ import re
 import argparse
 from zipfile import ZipFile
 from tsvio import TSVReader, TSVWriter, DuplicateError
+
+import configEMS
 
 DESCRIPTION = """\
 Converts DFM CFMJ001 contest and candidate definition files.
@@ -49,6 +128,7 @@ def parse_args():
     return args
 
 args = parse_args()
+config = configEMS.load_ems_config()
 
 # The CFMJ001_ContestData file contains basic contest info
 contheader = "ELECTION|CONTESTID|CONTESTTITLE1|CONTESTTITLE2|NUMTOVOTFOR"\
@@ -87,7 +167,7 @@ candheader2 = "iContestID|szBallotHeading|szSubHeading|szOfficeTitle|szOfficeAbb
 candlist_header = "contest_id|cand_id|cand_name|ballot_designation|cand_party|incumbent|qualified"
 contlist_header = "contest_seq|contest_id|district_id|headings|ballot_title|contest_abbr|contest_party|vote_for|on_ballot"
 
-separator = "|" if args.pipe else "\t"
+separator = config.tsv_separator
 
 cont_extra = {} # Extra contest definitions in candidate file
 
@@ -161,7 +241,8 @@ with ZipFile("ems-raw.zip") as rzip:
 
                 # Contact info not extracted now [TODO]
                 szCandidateName = szCandidateName.rstrip('*')
-                w.addline(iContestID, iCandidateID, szCandidateName,
+                w.addline(iContestID.zfill(config.contest_digits),
+                          iCandidateID, szCandidateName,
                           szBallotDesignation, szPartyName, boolstr(iIncumbent),
                           boolstr(dtQualified != ""))
             # End loop over input lines
@@ -171,8 +252,7 @@ with ZipFile("ems-raw.zip") as rzip:
     with TSVReader("CFMJ001_ContestData.tsv", opener=rzip,
                    binary_decode=True, encoding=DFM_ENCODING,
                    validate_header=contheader) as r:
-        seq = 0;
-
+        seq = 0
         with TSVWriter("contlist-orig.tsv", True, separator, contlist_header) as w:
             for (election, contestid, contesttitle1, contesttitle2, numtovotfor,
                 termofoffice, filingfee, numofcands, numqualifiedcands, numtovotfor1,
@@ -217,7 +297,8 @@ with ZipFile("ems-raw.zip") as rzip:
 
                 seq += 1
 
-                w.addline(str(seq).zfill(3), contestid, districtid,
+                w.addline(str(seq).zfill(3), 
+                          contestid.zfill(config.contest_digits), districtid,
                           szBallotHeading, szOfficeTitle, contesttitle1,
                           contestparty, numtovotfor, boolstr(iOfficeOnBallot))
             # End loop over input lines

@@ -34,6 +34,8 @@ import argparse
 from zipfile import ZipFile
 from tsvio import TSVReader, TSVWriter, DuplicateError
 
+import configEMS
+
 DESCRIPTION = """\
 Converts DFM CFMJ008 measure definition file.
 
@@ -60,14 +62,15 @@ def parse_args():
                         help='enable verbose info printout')
     parser.add_argument('-w', '--warn', action='store_true',
                         help='enable verbose warnings')
-    parser.add_argument('-p', dest='pipe', action='store_true',
-                        help='use pipe separator else tab')
 
     args = parser.parse_args()
 
     return args
 
 args = parse_args()
+config = configEMS.load_ems_config()
+
+separator = config.tsv_separator
 
 
 headerline = "iMeasureID|sDesignation|szMeasureAbbr1|szMeasureAbbr2|iBallotPosition1"\
@@ -85,7 +88,6 @@ headerline = "iMeasureID|sDesignation|szMeasureAbbr1|szMeasureAbbr2|iBallotPosit
 
 meas_header = "contest_seq|contest_id|district_id|headings|ballot_title|contest_abbr|choice_names"
 
-separator = "|" if args.pipe else "\t"
 
 def joinlist(*args: str, sep:str='~')->str:
     """
@@ -99,7 +101,7 @@ with ZipFile("ems-raw.zip") as rzip:
                    binary_decode=True, encoding=DFM_ENCODING,
                    validate_header=headerline) as r:
         # Compute a sequence number of original input lines
-        seq = 0;
+        seq = 0
         with TSVWriter("measlist-orig.tsv",
                        sort=False,
                        header=meas_header,
@@ -124,7 +126,7 @@ with ZipFile("ems-raw.zip") as rzip:
 
                 seq += 1
 
-                w.addline(str(seq).zfill(3), iMeasureID, sDistrictID,
+                w.addline(str(seq).zfill(3), iMeasureID.zfill(config.contest_digits), sDistrictID,
                           joinlist(szGroupHdg, szBallotHeading,szSubHeading),
                           sDesignation,
                           joinlist(szMeasureAbbr1, szMeasureAbbr2),

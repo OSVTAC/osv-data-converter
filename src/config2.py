@@ -173,7 +173,6 @@ def reform_regex_map(v:str,                 # Base pattern
     into a tuple of a compiled regex match with named patterns and
     a split format string.
     """
-    print(f"reform_regex_map('{v}', whole={whole})")
     m = re.match(r'^(.*?)=(.*)', v)
     if not m:
         raise InvalidConfig(f"Invalid Config Pattern Map '{v}'")
@@ -304,6 +303,14 @@ def validate_attr(v:Any,        # Value to test
             # get the type
             t = validate.__args__[0]
             v = [ validate_attr_ok(i, t, k) for i in v]
+            return v, False
+
+        if issubclass(validate, Set):
+            if not isinstance(v,list):
+                raise InvalidConfig(f"Expected {validate} for {k}")
+            # get the type
+            t = validate.__args__[0]
+            v = set([ validate_attr_ok(i, t, k) for i in v])
             return v, False
 
         if issubclass(validate,Dict):

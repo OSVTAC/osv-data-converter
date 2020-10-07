@@ -18,6 +18,8 @@ from typing import Union, List, Pattern, Match, Dict, Tuple, Optional
 import configEMS
 import distpctutils
 
+from distpctutils import (write_distpct, write_pctdist, distpct_inverse)
+
 DESCRIPTION = """\
 Converts DFM list of district names and precincts.
 
@@ -28,7 +30,7 @@ Reads the following files:
 Creates the following files:
   * distname-orig.tsv
   * pctname-orig.tsv
-  * distpct-orig.tsv.gz
+  * distpct.tsv.gz
 """
 
 VERSION='0.0.1'     # Program version
@@ -96,8 +98,8 @@ with TSVWriter('distname-orig.tsv', sep=separator, unique_col_check=0,
     for district_id, district_name in distpctutils.enter_distextra(distpct).items():
         distname.addline(district_id, district_name)
 
-distpctutils.write_distpct(distpct, sep=separator)
-distpctutils.write_pctdist(distpct, sep=separator)
+write_distpct(distpct, sep=separator)
+write_pctdist(distpct_inverse(distpct), sep=separator)
     
 
 
