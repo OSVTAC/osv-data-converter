@@ -128,6 +128,7 @@ def extract_table(infile, separator):
 
 def main():
 
+    global args
     args = parse_args()
 
     separator = "|" if args.pipe else "\t"

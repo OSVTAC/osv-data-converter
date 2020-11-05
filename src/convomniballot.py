@@ -138,6 +138,7 @@ config_attrs = {
     "contest_party_pats": config_pattern_list,  # Match contests with party
     "contest_party_crossover_pats": config_pattern_list,  # Match contests with party
     "running_mate_pats": config_pattern_list,  # Match contests with running mate
+    "running_mate_name_split": str,
     "bt_digits": int,
     "contest_map_file": str,
     "candidate_map_file": str,
@@ -150,6 +151,7 @@ config_attrs = {
     "election_voting_district": str,
     "election_base_suffix": str,
     "cand_extid_prefix": bool,
+    "all_mail_election": bool,
     "turnout_result_style": str,
     "turnout_party_ids":str,
     }
@@ -159,6 +161,7 @@ config_default = {
     "turnout_result_style": "EMT",
     "election_voting_district": "0",
     "cand_extid_prefix": True,
+    "all_mail_election": False,
     "election_base_suffix": "",
     "turnout_party_ids":"ALL AI DEM GRN LIB PF REP NPP",
    }
@@ -172,6 +175,7 @@ if use_config2:
         contest_party_pats:config_pattern_list  # Party-only office patterns
         contest_party_crossover_pats:config_pattern_list  # Crossover parties
         running_mate_pats:config_pattern_list   # Contest with running mate
+        running_mate_name_split: str
         contest_map_file:str                    # maps contest omniID
         candidate_map_file:str                  # maps candidate omniID
         approval_required:Dict[str,List[str]]   # approval required by measure name
@@ -1357,13 +1361,23 @@ for wiformat in range(1,len(writeinfiles)):
                 if is_writein_candidate != 'Y':
                     continue
             seq += 1
+            # Check for running mate
+            running_mate = None
+            if config.running_mate_name_split:
+                m = re.match(config.running_mate_name_split,Description)
+                if m:
+                    Description, running_mate = m.groups()
+                    #print(f"{Description} Running Mate: {running_mate}")
             newtsvline(writein_candlines,ContestId,seq,Id, Description)
-            added_contcand.setdefault(ContestId,[]).append({
+            candj = {
                 "_id": Id,
                 "_id_ext": "ds:"+ExternalId,
                 "ballot_title": str2istr(Description),
                 'is_writein': True
-                })
+                }
+            if running_mate:
+                candj['running_mate'] = str2istr(running_mate)
+            added_contcand.setdefault(ContestId,[]).append(candj)
     break
 
 if writein_candlines:

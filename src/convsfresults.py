@@ -98,13 +98,10 @@ TRANSLATIONS_FILE = (os.path.dirname(__file__)+
 
 SOV_FILE = "psov"
 
-have_EDMV = True
+# have_EDMV = True (Set by !config.all_mail_election)
 have_RSCst = True
 
 check_duplicate_turnout = False
-
-grand_totals_wrong = True # Bug in SOV: Cumulative not computed
-#grand_totals_wrong = False # Bug in SOV: Cumulative not computed
 
 DEFAULT_JSON_DUMP_ARGS = dict(sort_keys=True, separators=(',\n',':'), ensure_ascii=False)
 PP_JSON_DUMP_ARGS = dict(sort_keys=True, indent=4, ensure_ascii=False)
@@ -114,7 +111,9 @@ approval_percent_pat = re2(r'^(\d+)%$')
 
 CONFIG_FILE = "config-results.yaml"
 config_attrs = dict(
-    card_turnout_contests=config_idlist
+    card_turnout_contests=config_idlist,
+    all_mail_election=bool,
+    grand_totals_wrong=bool,
     )
 
 # Collect district names for map
@@ -351,6 +350,14 @@ CardTurnOut = []
 if config.card_turnout_contests:
     for i,v in enumerate(config.card_turnout_contests):
         CardContest[v] = i+1
+
+have_EDMV =  not config.all_mail_election
+# Bug in SOV: Cumulative not computed
+grand_totals_wrong = config.grand_totals_wrong
+
+
+if args.verbose:
+    print(f"all_mail_election={config.all_mail_election} have_EDMV={have_EDMV}")
 
 # Load translations
 translator = Translator(TRANSLATIONS_FILE)
@@ -765,8 +772,9 @@ ContestManifest_attrs= {
     "Id":str,
     "ExternalId":str,
     "VoteFor":int,
-    "NumOfRanks":int
-    }
+    "NumOfRanks":int,
+    "Disabled":int,     # New in 5.10.50.85
+   }
 
 CandidateManifest_attrs= {
     "Description":str,
@@ -774,6 +782,7 @@ CandidateManifest_attrs= {
     "ExternalId":str,
     "ContestId":str,
     "Type":str,
+    "Disabled":int,     # New in 5.10.50.85
     }
 
 CandidateManifest = namedtuple("CandidateManifest",CandidateManifest_attrs.keys())
@@ -783,7 +792,7 @@ ContestManifest = {}
 CandidateManifest_by_ContestId = {}
 CandidateManifest_by_Id = {}
 
-known_manifest_versions = {"5.2.18.2", "5.10.11.24"}
+known_manifest_versions = {"5.2.18.2", "5.10.11.24", "5.10.50.85"}
 
 haveCVRExport = os.path.isfile("CVR_Export.zip")
 if haveCVRExport:
@@ -1006,16 +1015,20 @@ with ZipFile("resultdata-raw.zip") as rzip:
         }
 
     # Read the summary psv file
+    # Extract summary_reporting[contest_id] and summary_precincts[contest_id]
     sep = '|'
     sovfile = "summary.psv"
+    if (sovfile not in zipfilenames and
+        "summary0.psv" in zipfilenames):
+        sovfile = "summary0.psv"
     summary_reporting = {}
     summary_precincts = {}
+    party_suffix_pat = re2(r' *␤(\w+)')
     if sovfile in zipfilenames:
         with rzip.open(sovfile) as f:
             append_sha_list(sovfile)
             contest_id = 'TURNOUT'
             precincts_reported_pat = re2(r'Precincts Reported: (\d+) of (\d+)')
-            party_suffix_pat = re2(r' *␤(\w+)')
             linenum = 0
             for line in f:
                 line = decodeline(line, SF_SOV_ENCODING)
@@ -1065,7 +1078,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
         subtotal_col = -1
         pctname2areaid = {} # Map original precinct ID to area ID
 
-        have_EDMV = True # sov has only total, no ED MV subtotals
+        have_EDMV =  not config.all_mail_election
 
         if readDictrict:
             col0_header = 'District'
@@ -1082,7 +1095,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
         district_category_pat=re2(r'^(United States Representative|Member of the State Assembly|County Supervisor|Neighborhood|CONGRESSIONAL|ASSEMBLY|SUPERVISORIAL|NEIGHBORHOOD)(?:$|[\|\t])')
         # If grand_totals_wrong compute Cumulative
         skip_area_pat_str = (r'^(Cumulative|Cumulative - Total|Countywide|Countywide - Total|City and County - Total)$'
-                         if grand_totals_wrong and not readDictrict else
+                         if (not have_EDMV or grand_totals_wrong) and not readDictrict else
                          r'^(Electionwide|San Francisco|Cumulative|Countywide|City and County) - Total$')
         skip_area_pat = re2(skip_area_pat_str)
         heading_pat = re2(r'Statement of the Vote(?: -)?( \d+)?(.Districts and Neighborhoods)?$')
@@ -1137,7 +1150,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                 in_turnout = False
                 if page == '1':
                     results_json["_reporting_time"]=report_time_str
-                if readDictrict and contest_name:
+                if (readDictrict or not have_dsov) and contest_name:
                     flushcontest(contest_order, contest_id, contest_name,
                                 headerline, contest_rcvlines,
                                 contest_totallines, contest_arealines)
@@ -1160,6 +1173,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                 if line.endswith(TURNOUT_LINE_SUFFIX):
                     in_turnout = True
                     contest_id = contest_name = 'TURNOUT'
+                    contest_party = ''
                 elif contest_header_pat.match(line):
                     contest_name, vote_for = contest_header_pat.groups()
                     # Trim duplicate party suffix
@@ -1257,7 +1271,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         cols[4] == 'Undervotes' and
                         cols[5] == 'Overvotes' and
                         cols[6] == col0_header):
-                        have_EDMV = True
+                        have_EDMV = not config.all_mail_election
                         have_RSCst = True
                         have_RSReg = True
                         cand_start_col = 7
@@ -1269,7 +1283,8 @@ with ZipFile("resultdata-raw.zip") as rzip:
                           cols[5] == col0_header):
                         #print("WARNING:have_EDMV = False")
                         # Maybe only in the zero report
-                        have_EDMV = True
+                        have_EDMV = not config.all_mail_election
+
                         have_RSReg = True
                         have_RSCst = False
                         cand_start_col = 6
@@ -1279,7 +1294,8 @@ with ZipFile("resultdata-raw.zip") as rzip:
                           cols[4] == col0_header):
                         #print("WARNING:have_EDMV = False")
                         # Maybe only in the zero report
-                        have_EDMV = True # False in prior zero reports
+                        have_EDMV = not config.all_mail_election
+ # False in prior zero reports
                         have_RSCst = have_RSReg = False
                         cand_start_col = 5
                     else:
@@ -1366,13 +1382,16 @@ with ZipFile("resultdata-raw.zip") as rzip:
                 headers = ['area_id','subtotal_type'
                            ] + resultlist + candheadings;
                 headerline = jointsvline(*headers)
+                if args.debug:
+                    print(f"subtotal_col={subtotal_col} headerline={headerline}")
+
 
             else:
                 # Normal data line
                 # Column of data
                 if skip_area_pat.match(cols[0]) and not readDictrict:
                     # Superflous totals
-                    #if args.debug: print(f"Skip {linenum}:{line}")
+                    if args.debug: print(f"Skip {linenum}:{line}")
                     skip_area = True
                     continue
 
@@ -1383,7 +1402,6 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         continue
                     area_id = "ALL"
                     isvbm_precinct = False
-                    subtotal_col = 0
                     skip_area = False
                     #if args.debug: print(f"ALL at {linenum}")
                     continue
@@ -1396,7 +1414,8 @@ with ZipFile("resultdata-raw.zip") as rzip:
 
                 elif next_is_district:
                     # This should be a district heading
-                    if ncols!=1 and ncols!=7 and ncols!=5:
+                    if (ncols!=1 and
+                        cols[0]!=cols[-1]):
                         raise FormatError(f"sov district heading mismatch={ncols} {cols} {linenum}:{line}")
                     name = cols[0]
                     #Reform name
@@ -1409,7 +1428,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
                         print(f"Can't map district code {name}")
                     next_is_district = False
                     skip_area = area_id == 'CONG13'
-                    have_EDMV = True
+                    have_EDMV = not config.all_mail_election
                     subtotal_col = 0
                     continue
 
@@ -1439,6 +1458,9 @@ with ZipFile("resultdata-raw.zip") as rzip:
 
                     if ncols==1:
                         have_EDMV = True
+                        subtotal_col = 0
+                        if config.all_mail_election:
+                            print(f"have_EDMV cols={cols}")
                     if have_EDMV:
                         if ncols == expected_cols:
                             raise FormatError(
@@ -2005,7 +2027,7 @@ with ZipFile("resultdata-raw.zip") as rzip:
 
             # End normal data line
         # End Loop over input lines
-        if readDictrict:
+        if readDictrict or not have_dsov:
             flushcontest(contest_order, contest_id, contest_name,
                         headerline, contest_rcvlines,
                         contest_totallines, contest_arealines)
